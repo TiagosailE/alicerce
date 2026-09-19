@@ -6,6 +6,16 @@ module DatabaseRoles
   APP_ROLE = "alicerce_app".freeze
   APP_PASSWORD = "alicerce_app".freeze
 
+  # A migration revokes UPDATE and DELETE from the app role the moment it
+  # creates one of these (ADR 0010); the blanket grant below would silently
+  # re-add them on every db:prepare unless told to skip these tables. On a
+  # first-ever boot the role does not exist yet when that migration runs
+  # (this task runs after db:migrate, matching how db:prepare can create the
+  # role only once a database exists), so the migration's own revoke and
+  # grants are best-effort and this is what actually enforces them.
+  APPEND_ONLY_TABLES = %w[audit_events].freeze
+  OWNER_ONLY_FUNCTIONS = { "audit_purge" => "bigint, timestamptz", "audit_redact" => "bigint, varchar, bigint" }.freeze
+
   module_function
 
   def prepare!(connection)
@@ -30,6 +40,26 @@ module DatabaseRoles
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO #{APP_ROLE};
       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO #{APP_ROLE};
     SQL
+
+    revoke_append_only_privileges!(connection)
+    grant_owner_only_function_privileges!(connection)
+  end
+
+  def revoke_append_only_privileges!(connection)
+    APPEND_ONLY_TABLES.each do |table|
+      next unless connection.table_exists?(table)
+
+      connection.execute("REVOKE UPDATE, DELETE ON #{table} FROM #{APP_ROLE}")
+    end
+  end
+
+  def grant_owner_only_function_privileges!(connection)
+    OWNER_ONLY_FUNCTIONS.each do |name, signature|
+      exists = connection.select_value("SELECT 1 FROM pg_proc WHERE proname = #{connection.quote(name)}")
+      next unless exists
+
+      connection.execute("GRANT EXECUTE ON FUNCTION #{name}(#{signature}) TO #{APP_ROLE}")
+    end
   end
 
   def app_connection_config(owner_config)
