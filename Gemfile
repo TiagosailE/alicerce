@@ -13,7 +13,7 @@ gem "strong_migrations", "~> 2.8"
 gem "tzinfo-data", platforms: %i[windows jruby]
 
 # ActiveSupport 8.1.3 calls JSON.parse with a positional options hash, which json 3 rejects.
-gem "json", "< 3"
+gem "json", "< 4"
 
 group :development, :test do
   gem "debug", platforms: %i[mri windows], require: "debug/prelude"
