@@ -29,10 +29,31 @@ RSpec.describe "SPA shell" do
   end
 
   it "never answers API paths with the shell" do
-    get "/api/v1/unknown"
+    %w[/api /api/ /api/v1/unknown].each do |path|
+      get path
 
+      expect(response).to have_http_status(:not_found), path
+      expect(response.body).not_to include('<div id="root">')
+    end
+  end
+
+  it "never serves the shell as a static file, which would skip the CSP" do
+    %w[/spa /spa/ /spa/index.html].each do |path|
+      get path
+
+      expect(response).to have_http_status(:not_found), path
+    end
+  end
+
+  it "answers 404 to requests that are not page navigations" do
+    get "/estoque/produtos", headers: { "Accept" => "application/json" }
     expect(response).to have_http_status(:not_found)
-    expect(response.body).not_to include('<div id="root">')
+
+    %w[/favicon.ico /wp-login.php].each do |path|
+      get path
+
+      expect(response).to have_http_status(:not_found), path
+    end
   end
 
   it "does not hijack the health check" do
