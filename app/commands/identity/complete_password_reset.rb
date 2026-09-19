@@ -15,9 +15,9 @@ module Identity
   class CompletePasswordReset
     def self.call(...) = new(...).call
 
-    def initialize(token:, password:)
+    def initialize(token:, new_password:)
       @token = token
-      @password = password
+      @new_password = new_password
     end
 
     def call
@@ -25,7 +25,7 @@ module Identity
       return Result.failure(:invalid_token) if user.nil? || user.demo?
 
       ApplicationRecord.transaction do
-        return Result.invalid(user) unless user.update(password: @password)
+        return Result.invalid(user) unless user.update(password: @new_password)
 
         Identity::Session.revoke_others_for!(user)
         Rails.logger.info(event: "password_reset_completed", user_id: user.id)
