@@ -22,7 +22,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | bcrypt cost 12, 12 to 72 byte passwords, common password check | designed, slice 1 | ADR 0007 |
 | Rate limits on sign-in, reset and invitation acceptance; no hard lockout | designed, slice 1 | ADR 0007 |
 | Database sessions storing only token digests; rotation on sign-in, organization switch and role or password change; revocation | designed, slice 1 | ADR 0007 |
-| Idle (30 min) and absolute (12 h) session expiry (ASVS 3.3.2) | designed, slice 1 | ADR 0007 |
+| Idle (30 min) and absolute (12 h) session expiry (ASVS 3.3.2) | in place | ADR 0007, `Identity::Session`, `Api::V1::BaseController#resume_session` |
 | Single-use reset token, 20 minute expiry, uniform responses | designed, slice 1 | ADR 0007 |
 | Timing-safe comparison of tokens and codes | designed, slice 1 | ADR 0007 |
 | Optional TOTP with recovery codes | designed, slice 7 | ADR 0007 |
@@ -43,7 +43,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | Mass assignment: `params.expect` with explicit lists, no status or tenant from clients | designed, each slice | `CONTRIBUTING.md` |
 | No SQL built by interpolation | in place (checked) | Brakeman in `bin/ci` with `--exit-on-warn` |
 | Output escaping: React by default, raw HTML banned | in place | `frontend/eslint.config.js` (`dangerouslySetInnerHTML` rule) |
-| CSRF on state-changing requests | designed, slice 1 | ADR 0007 |
+| CSRF on state-changing requests | in place | ADR 0007, `Api::V1::BaseController#verify_csrf_token!`, `spec/requests/api/v1/session_spec.rb` |
 | Outbound HTTP only to allowlisted hosts with timeouts (anti-SSRF); no user-supplied URLs are fetched | designed, slice 1 (email) | ADR 0002 |
 | Uploads (supplier invoice PDF on receipts): type by magic bytes, 5 MB cap, generated names, stored in Postgres, served with `Content-Disposition: attachment` | designed, slice 4 | `docs/scope.md` |
 
@@ -56,7 +56,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | The built app runs under that CSP with no violations, checked in a real browser against the production image | in place | `frontend/e2e/shell.spec.ts` (with a control test that proves violations are detected), image job in `.github/workflows/ci.yml` |
 | The shell is never served as a static file | in place | `frontend/vite.config.ts` builds it into `frontend/dist`; `spec/requests/spa_spec.rb`; shell location step in `config/ci.rb` |
 | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` | in place | `config/application.rb`, `spec/requests/spa_spec.rb`, `script/check_production_headers.rb` |
-| Session cookie `__Host-`, `Secure`, `HttpOnly`, `SameSite=Lax` | designed, slice 1 | ADR 0007 |
+| Session cookie `__Host-`, `Secure`, `HttpOnly`, `SameSite=Lax` | in place | ADR 0007, `Api::V1::BaseController`, verified against a real production-mode boot |
 | Host allow list; production refuses to boot without a host | in place | `config/environments/production.rb`, `script/check_production_headers.rb` (unknown host answers 403) |
 
 ## Secrets
