@@ -83,7 +83,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/invitations/{token}/acceptance": {
+    "/invitations/acceptance": {
         parameters: {
             query?: never;
             header?: never;
@@ -94,7 +94,7 @@ export interface paths {
         put?: never;
         /**
          * Accept a pending invitation
-         * @description No session required (ADR 0003): holding the token is the only credential this action recognizes. Signs the accepting user in on success, the same as POST /session.
+         * @description No session required (ADR 0003): holding the token is the only credential this action recognizes. The token travels in the body, never the URL, so it cannot leak through request path logging. Signs the accepting user in on success, the same as POST /session.
          */
         post: operations["acceptInvitation"];
         delete?: never;
@@ -125,6 +125,66 @@ export interface paths {
          * @description Owner and admin only; denied to demo users regardless of role (ADR 0008).
          */
         patch: operations["updateMembership"];
+        trace?: never;
+    };
+    "/password_resets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request a password reset email
+         * @description Always answers 204 whether or not the email belongs to an account or a demo one (ADR 0007: uniform response); a real, non-demo account receives an email with a single-use link that expires in 20 minutes.
+         */
+        post: operations["createPasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/password_resets/completion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete a password reset with its token
+         * @description No session is started (ADR 0007): sign in afterwards with the new password. The token travels in the body, never the URL, so it cannot leak through request path logging; it stops working after this succeeds, since it is bound to the password salt it just changed.
+         */
+        post: operations["completePasswordReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change the signed-in user's own password
+         * @description Requires the current password; denied to demo users (ADR 0008: an authentication setting). Revokes every other session of the caller, in every organization (ADR 0007), leaving this one alive.
+         */
+        patch: operations["updatePassword"];
         trace?: never;
     };
 }
@@ -221,6 +281,7 @@ export interface components {
             data: components["schemas"]["Invitation"];
         };
         AcceptInvitationRequest: {
+            token: string;
             /** @description Required when the invited email has no account yet. */
             name?: string;
             /** @description Required when the invited email has no account yet. */
@@ -238,6 +299,18 @@ export interface components {
         };
         MemberResponseBody: {
             data: components["schemas"]["Member"];
+        };
+        CreatePasswordResetRequest: {
+            /** Format: email */
+            email: string;
+        };
+        CompletePasswordResetRequest: {
+            token: string;
+            password: string;
+        };
+        ChangePasswordRequest: {
+            current_password: string;
+            password: string;
         };
     };
     responses: {
@@ -416,9 +489,7 @@ export interface operations {
                 /** @description The csrf_token from the most recent GET or POST /session response. */
                 "X-CSRF-Token": components["parameters"]["CsrfToken"];
             };
-            path: {
-                token: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -482,6 +553,89 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             422: components["responses"]["Error"];
+        };
+    };
+    createPasswordReset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description The request was accepted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    completePasswordReset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompletePasswordResetRequest"];
+            };
+        };
+        responses: {
+            /** @description The password was reset. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    updatePassword: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description The password was changed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
         };
     };
 }

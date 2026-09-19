@@ -20,7 +20,10 @@ module Api
       def create
         email, password = params.expect(:email, :password)
         user = Identity::User.authenticate_by(email:, password:)
-        return render_error(status: :unauthorized, code: "unauthenticated", message: "Invalid email or password") unless user
+        unless user
+          Rails.logger.warn(event: "sign_in_failed", email_digest: Identity::User.email_digest(email))
+          return render_error(status: :unauthorized, code: "unauthenticated", message: "Invalid email or password")
+        end
 
         organization = resolve_organization(user)
         return render_organization_required(user) unless organization

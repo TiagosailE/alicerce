@@ -19,11 +19,13 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 
 | Control | Status | Evidence |
 |---|---|---|
-| bcrypt cost 12, 12 to 72 byte passwords, common password check | designed, slice 1 | ADR 0007 |
-| Rate limits on sign-in, reset and invitation acceptance; no hard lockout | in place for sign-in and invitation acceptance, designed for reset | ADR 0007, `Api::V1::SessionsController`, `Api::V1::Invitations::AcceptancesController` |
-| Database sessions storing only token digests; rotation on sign-in, organization switch and role or password change; revocation | in place for sign-in, organization switch and role change; designed for password change | ADR 0007, `Identity::Session.revoke_others_for!`, `spec/requests/api/v1/memberships_spec.rb` |
+| bcrypt cost 12, 12 to 72 byte passwords | in place | ADR 0007, `Identity::User` |
+| Common password check on new passwords | designed, not yet built | ADR 0007 |
+| Rate limits on sign-in, reset, invitation acceptance and password change; no hard lockout | in place | ADR 0007, `Api::V1::SessionsController`, `Api::V1::Invitations::AcceptancesController`, `Api::V1::PasswordResetsController`, `Api::V1::PasswordResets::CompletionsController`, `Api::V1::PasswordsController` |
+| Database sessions storing only token digests; rotation on sign-in, organization switch and role or password change; revocation | in place | ADR 0007, `Identity::Session.revoke_others_for!`, `spec/requests/api/v1/memberships_spec.rb`, `spec/requests/api/v1/passwords_spec.rb` |
 | Idle (30 min) and absolute (12 h) session expiry (ASVS 3.3.2) | in place | ADR 0007, `Identity::Session`, `Api::V1::BaseController#resume_session` |
-| Single-use reset token, 20 minute expiry, uniform responses | designed, slice 1 | ADR 0007 |
+| Single-use reset token, 20 minute expiry, uniform response (identical status, body and enqueue for every request, so neither shape nor timing tells an unknown, demo or real email apart) | in place | ADR 0007, `Identity::User` (`has_secure_password reset_token:`), `Identity::RequestPasswordReset`, `Identity::PasswordResetMailerJob` |
+| Single-use and invitation tokens travel only in the request body, never the URL path: Rails logs the raw request path unfiltered (`filtered_path` only redacts the query string), so a token there would leak into every log line for that request | in place | `config/routes.rb` (`POST /password_resets/completion`, `POST /invitations/acceptance`) |
 | Timing-safe comparison of tokens and codes | designed, slice 1 | ADR 0007 |
 | Optional TOTP with recovery codes | designed, slice 7 | ADR 0007 |
 
@@ -44,7 +46,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | No SQL built by interpolation | in place (checked) | Brakeman in `bin/ci` with `--exit-on-warn` |
 | Output escaping: React by default, raw HTML banned | in place | `frontend/eslint.config.js` (`dangerouslySetInnerHTML` rule) |
 | CSRF on state-changing requests | in place | ADR 0007, `Api::V1::BaseController#verify_csrf_token!`, `spec/requests/api/v1/session_spec.rb` |
-| Outbound HTTP only to allowlisted hosts with timeouts (anti-SSRF); no user-supplied URLs are fetched | designed, slice 1 (email) | ADR 0002 |
+| Outbound HTTP only to allowlisted hosts with timeouts (anti-SSRF); no user-supplied URLs are fetched | in place | ADR 0002, `BrevoClient` (a fixed host constant, never built from input), `Identity::PasswordResetMailerJob` |
 | Uploads (supplier invoice PDF on receipts): type by magic bytes, 5 MB cap, generated names, stored in Postgres, served with `Content-Disposition: attachment` | designed, slice 4 | `docs/scope.md` |
 
 ## Transport and headers
@@ -88,8 +90,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 
 | Control | Status | Evidence |
 |---|---|---|
-| Logs tagged with request id | in place | `config/environments/production.rb` (`log_tags`) |
-| Structured JSON logs with user and organization ids, personal data filtered | designed, slice 1 | `config/initializers/filter_parameter_logging.rb` gains document and contact fields |
+| Structured JSON logs tagged with the request, user and organization ids, personal data filtered | in place | `StructuredLogFormatter`, `config/environments/production.rb`; `config/initializers/filter_parameter_logging.rb` still needs document and contact fields once catalog exists |
 | Append-only audit trail protected by a trigger | in place | ADR 0010, `db/migrate/20260919110000_create_audit_events.rb`, `spec/db/audit_events_constraints_spec.rb` |
 | Alert on spikes of 401 and 403 responses | designed, Milestone 2 | `docs/scope.md` |
 

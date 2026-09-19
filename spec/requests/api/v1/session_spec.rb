@@ -64,6 +64,12 @@ RSpec.describe "Session API" do
       expect(response.parsed_body.dig("error", "code")).to eq("unauthenticated")
     end
 
+    it "logs a failed sign-in as a structured event with a hashed email, not the email itself (ADR 0007)" do
+      expect(Rails.logger).to receive(:warn).with(event: "sign_in_failed", email_digest: Identity::User.email_digest(user.email))
+
+      sign_in(email: user.email, password: "not-the-password")
+    end
+
     it "answers validation_failed when email or password is missing" do
       csrf_token = fetch_csrf_token
       post "/api/v1/session", params: { email: user.email }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
