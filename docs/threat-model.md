@@ -13,14 +13,14 @@ STRIDE over the three flows where a failure costs the most: authentication, invo
 | STRIDE | Threat | Mitigation | Status |
 |---|---|---|---|
 | Spoofing | Credential stuffing and brute force on sign-in | `rate_limit` per IP and per IP and email pair, bcrypt cost 12, common password list, optional TOTP (ADR 0007) | designed, slice 1 |
-| Spoofing | Stolen session cookie | `__Host-` cookie, `Secure`, `HttpOnly`, `SameSite=Lax`, idle 30 min and absolute 12 h expiry, revocation list, rotation on sign-in and role change | designed, slice 1 |
+| Spoofing | Stolen session cookie | `__Host-` cookie, `Secure`, `HttpOnly`, `SameSite=Lax`, idle 30 min and absolute 12 h expiry, revocation list, rotation on sign-in and role change | in place for rotation and role-change revocation: `Identity::Session.revoke_others_for!`, `spec/requests/api/v1/memberships_spec.rb`; designed for password-change revocation |
 | Spoofing | Session tokens read from a database dump | only SHA-256 digests stored | designed, slice 1 |
 | Tampering | CSRF on state-changing requests | Rails forgery protection with `X-CSRF-Token`, `SameSite=Lax` as second layer | designed, slice 1 |
 | Repudiation | A user denies having signed in or changed a password | audit events for sign-in, sign-out, password and role changes, with IP and request id | designed, slice 1 |
 | Information disclosure | Account enumeration through sign-in or reset responses | identical responses and timing whether or not the email exists | designed, slice 1 |
 | Information disclosure | Reset token reuse or interception | single use (bound to the password salt), 20 minute expiry, sent only by email | designed, slice 1 |
 | Denial of service | Locking a known user out with failed attempts | no hard lockout and no limit per email alone; limits are per IP and per IP and email pair; responses are never delayed | designed, slice 1 |
-| Elevation of privilege | Demo visitor changes the demo account's password or invites others | demo flag denies authentication settings, invitations and email regardless of role; nightly reset | designed, slice 1 |
+| Elevation of privilege | Demo visitor changes the demo account's password or invites others | demo flag denies authentication settings, invitations and email regardless of role; nightly reset | in place for invitations and membership management: `Identity::Capabilities.manage_members?`, `spec/requests/api/v1/invitations_spec.rb`, `spec/requests/api/v1/memberships_spec.rb`; designed for authentication settings and email |
 | Elevation of privilege | XSS drives the API with the victim's cookie | CSP `default-src 'none'`, `script-src 'self'`, no inline code, `dangerouslySetInnerHTML` banned by lint | in place: `spec/requests/spa_spec.rb`, `frontend/eslint.config.js` |
 
 ## Invoicing

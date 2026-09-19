@@ -7,6 +7,9 @@ Rails.application.routes.draw do
         resource :organization, only: :create, controller: "sessions/organizations"
       end
       resources :audit_events, only: :index
+      resources :invitations, only: :create
+      post "invitations/:token/acceptance", to: "invitations/acceptances#create", as: :invitation_acceptance
+      resources :memberships, only: %i[update destroy]
     end
   end
 

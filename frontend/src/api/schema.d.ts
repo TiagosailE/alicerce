@@ -63,6 +63,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite someone to join the organization
+         * @description Owner and admin only; denied to demo users regardless of role (ADR 0008).
+         */
+        post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invitations/{token}/acceptance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a pending invitation
+         * @description No session required (ADR 0003): holding the token is the only credential this action recognizes. Signs the accepting user in on success, the same as POST /session.
+         */
+        post: operations["acceptInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memberships/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a member from the organization
+         * @description Owner and admin only; denied to demo users regardless of role (ADR 0008).
+         */
+        delete: operations["destroyMembership"];
+        options?: never;
+        head?: never;
+        /**
+         * Change a member's role
+         * @description Owner and admin only; denied to demo users regardless of role (ADR 0008).
+         */
+        patch: operations["updateMembership"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -136,6 +200,45 @@ export interface components {
             data: components["schemas"]["AuditEvent"][];
             meta: components["schemas"]["Meta"];
         };
+        CreateInvitationRequest: {
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "owner" | "admin" | "purchasing" | "sales" | "finance" | "read_only";
+        };
+        Invitation: {
+            id: number;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "owner" | "admin" | "purchasing" | "sales" | "finance" | "read_only";
+            /** Format: date-time */
+            expires_at: string;
+            /** @description The raw invitation token. Shown only in this response; only its digest is stored. */
+            token: string;
+        };
+        InvitationResponseBody: {
+            data: components["schemas"]["Invitation"];
+        };
+        AcceptInvitationRequest: {
+            /** @description Required when the invited email has no account yet. */
+            name?: string;
+            /** @description Required when the invited email has no account yet. */
+            password?: string;
+        };
+        UpdateMembershipRequest: {
+            /** @enum {string} */
+            role: "owner" | "admin" | "purchasing" | "sales" | "finance" | "read_only";
+        };
+        Member: {
+            id: number;
+            user: components["schemas"]["User"];
+            /** @enum {string} */
+            role: "owner" | "admin" | "purchasing" | "sales" | "finance" | "read_only";
+        };
+        MemberResponseBody: {
+            data: components["schemas"]["Member"];
+        };
     };
     responses: {
         /** @description The current session, if any, and a CSRF token. */
@@ -163,6 +266,24 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["AuditEventListResponseBody"];
+            };
+        };
+        /** @description A newly issued invitation, with its one-time token. */
+        InvitationResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["InvitationResponseBody"];
+            };
+        };
+        /** @description A member of the current organization. */
+        MemberResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MemberResponseBody"];
             };
         };
     };
@@ -264,6 +385,103 @@ export interface operations {
             200: components["responses"]["AuditEventListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+        };
+    };
+    createInvitation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInvitationRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["InvitationResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptInvitationRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["SessionResponse"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    destroyMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The member was removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    updateMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMembershipRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["MemberResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
 }
