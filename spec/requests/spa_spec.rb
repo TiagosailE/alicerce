@@ -28,12 +28,13 @@ RSpec.describe "SPA shell" do
     expect(response.headers["Permissions-Policy"]).to include("camera=()", "geolocation=()")
   end
 
-  it "never answers API paths with the shell" do
+  it "never answers API paths with the shell, answering the JSON error envelope instead" do
     %w[/api /api/ /api/v1/unknown].each do |path|
       get path
 
       expect(response).to have_http_status(:not_found), path
       expect(response.body).not_to include('<div id="root">')
+      expect(response.parsed_body.dig("error", "code")).to eq("not_found")
     end
   end
 

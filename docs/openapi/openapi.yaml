@@ -1,0 +1,196 @@
+openapi: 3.0.3
+info:
+  title: Alicerce API
+  version: "1"
+  description: >
+    Written first (ADR 0011): every response in spec/requests/api/v1 is
+    validated against this document by committee, and
+    frontend/src/api/schema.d.ts is generated from it.
+servers:
+  - url: /api/v1
+
+paths:
+  /session:
+    get:
+      operationId: getSession
+      summary: Current session and CSRF token
+      description: >
+        Always answers 200, signed in or not, so the SPA can fetch a CSRF
+        token before the first sign-in attempt.
+      responses:
+        "200":
+          $ref: "#/components/responses/SessionResponse"
+    post:
+      operationId: createSession
+      summary: Sign in
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/SessionResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: destroySession
+      summary: Sign out
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      responses:
+        "200":
+          $ref: "#/components/responses/SessionResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /session/organization:
+    post:
+      operationId: switchSessionOrganization
+      summary: Switch the active organization, rotating the session
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwitchOrganizationRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/SessionResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+components:
+  parameters:
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: The csrf_token from the most recent GET or POST /session response.
+      schema:
+        type: string
+
+  responses:
+    SessionResponse:
+      description: The current session, if any, and a CSRF token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SessionResponseBody"
+    Error:
+      description: An error in the shared envelope.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponseBody"
+
+  schemas:
+    User:
+      type: object
+      additionalProperties: false
+      required: [ id, name, email, demo ]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        demo: { type: boolean }
+
+    Organization:
+      type: object
+      additionalProperties: false
+      required: [ id, name, time_zone, demo ]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        time_zone: { type: string }
+        demo: { type: boolean }
+
+    Membership:
+      type: object
+      additionalProperties: false
+      required: [ role, organization ]
+      properties:
+        role:
+          type: string
+          enum: [ owner, admin, purchasing, sales, finance, read_only ]
+        organization:
+          $ref: "#/components/schemas/Organization"
+
+    SessionData:
+      type: object
+      additionalProperties: false
+      required: [ csrf_token, user, membership, memberships ]
+      properties:
+        csrf_token: { type: string }
+        user:
+          nullable: true
+          allOf: [ { $ref: "#/components/schemas/User" } ]
+        membership:
+          nullable: true
+          allOf: [ { $ref: "#/components/schemas/Membership" } ]
+        memberships:
+          type: array
+          items: { $ref: "#/components/schemas/Membership" }
+
+    SessionResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/SessionData"
+
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [ email, password ]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+        organization_id:
+          type: integer
+          description: Required only when the account belongs to more than one organization.
+
+    SwitchOrganizationRequest:
+      type: object
+      additionalProperties: false
+      required: [ organization_id ]
+      properties:
+        organization_id: { type: integer }
+
+    Error:
+      type: object
+      additionalProperties: false
+      required: [ code, message, details, request_id ]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string
+          nullable: true
+
+    ErrorResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ error ]
+      properties:
+        error:
+          $ref: "#/components/schemas/Error"
