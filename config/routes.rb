@@ -6,6 +6,7 @@ Rails.application.routes.draw do
       resource :session, only: %i[show create destroy] do
         resource :organization, only: :create, controller: "sessions/organizations"
       end
+      resources :audit_events, only: :index
     end
   end
 

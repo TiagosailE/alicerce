@@ -75,6 +75,26 @@ paths:
         "422":
           $ref: "#/components/responses/Error"
 
+  /audit_events:
+    get:
+      operationId: listAuditEvents
+      summary: List the current organization's audit trail
+      description: Owner and admin only (ADR 0008).
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          $ref: "#/components/responses/AuditEventListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+
 components:
   parameters:
     CsrfToken:
@@ -98,6 +118,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponseBody"
+    AuditEventListResponse:
+      description: A page of the audit trail.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AuditEventListResponseBody"
 
   schemas:
     User:
@@ -194,3 +220,41 @@ components:
       properties:
         error:
           $ref: "#/components/schemas/Error"
+
+    Meta:
+      type: object
+      additionalProperties: false
+      required: [ page, per_page, total ]
+      properties:
+        page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required: [ id, action, subject_type, subject_id, field_changes, actor, created_at ]
+      properties:
+        id: { type: integer }
+        action: { type: string }
+        subject_type: { type: string }
+        subject_id: { type: integer }
+        field_changes:
+          type: object
+          additionalProperties: true
+        actor:
+          $ref: "#/components/schemas/User"
+        created_at:
+          type: string
+          format: date-time
+
+    AuditEventListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AuditEvent" }
+        meta:
+          $ref: "#/components/schemas/Meta"
