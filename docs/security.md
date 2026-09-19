@@ -8,8 +8,8 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 
 | Control | Status | Evidence |
 |---|---|---|
-| `organization_id` on every tenant table, scope fails closed without a current organization | designed, slice 1 | ADR 0003 |
-| Postgres RLS on business tables, audit, idempotency keys and invitations, policies on `app.organization_id` (null when unset or reset), app role without `BYPASSRLS` | designed, slice 1 | ADR 0003, `docs/deploy.md` |
+| `organization_id` on every tenant table, scope fails closed without a current organization | in place | ADR 0003, `TenantScoped`, `Audit::Event` (the first table to use it) |
+| Postgres RLS on business tables, audit, idempotency keys and invitations, policies on `app.organization_id` (null when unset or reset), app role without `BYPASSRLS` | in place for `audit_events`, designed for the rest | ADR 0003, `docs/deploy.md`, `db/migrate/20260919110000_create_audit_events.rb` |
 | The whole test suite connects as the app role with production grants, so every spec runs under RLS; raw SQL specs prove other organizations are invisible | designed, slice 1 | ADR 0003 |
 | The tenant setting lives on a connection leased for the whole request and is reset on checkin | in place | ADR 0003, `TenantSetting`, `spec/lib/tenant_setting_spec.rb` |
 | Every `/api/v1` route in an isolation spec; a route without an entry fails the suite | in place | `RouteInventory`, `spec/requests/api/v1/route_inventory_spec.rb`; both matrices are still empty, nothing but the exempt session endpoints exists yet |
@@ -33,7 +33,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 |---|---|---|
 | Pundit policies, every rule false unless allowed | in place | ADR 0008, `ApplicationPolicy`; no concrete policy exists yet, nothing to authorize besides the exempt session endpoints |
 | `verify_authorized` and `verify_policy_scoped` on every API action | in place | ADR 0008, `Api::V1::BaseController`, `spec/requests/api/v1/authorization_enforcement_spec.rb` |
-| Role matrix spec generated per endpoint and role | designed, slice 1 | ADR 0008 |
+| Role matrix spec generated per endpoint and role | in place | ADR 0008, `spec/requests/api/v1/audit_events_spec.rb` (one example per role), `spec/requests/api/v1/route_inventory_spec.rb` |
 
 ## Input and output
 
@@ -90,7 +90,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 |---|---|---|
 | Logs tagged with request id | in place | `config/environments/production.rb` (`log_tags`) |
 | Structured JSON logs with user and organization ids, personal data filtered | designed, slice 1 | `config/initializers/filter_parameter_logging.rb` gains document and contact fields |
-| Append-only audit trail protected by a trigger | designed, slice 1 | ADR 0010 |
+| Append-only audit trail protected by a trigger | in place | ADR 0010, `db/migrate/20260919110000_create_audit_events.rb`, `spec/db/audit_events_constraints_spec.rb` |
 | Alert on spikes of 401 and 403 responses | designed, Milestone 2 | `docs/scope.md` |
 
 ## LGPD
