@@ -14,5 +14,6 @@ CI.run do
   step "Tests: Vitest", "npm --prefix frontend test"
 
   step "Build: SPA", "npm --prefix frontend run build"
-  step "Boot: production", "env RAILS_ENV=production SECRET_KEY_BASE_DUMMY=1 APP_HOST=ci.example bin/rails runner \"puts Rails.env\""
+  step "Build: shell stays out of public", "test ! -e public/spa/index.html && test -f frontend/dist/index.html"
+  step "Boot: production headers", "env RAILS_ENV=production BUNDLE_WITHOUT=development:test RAILS_LOG_LEVEL=fatal SECRET_KEY_BASE_DUMMY=1 APP_HOST=ci.example bin/rails runner script/check_production_headers.rb"
 end

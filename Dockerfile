@@ -40,6 +40,7 @@ RUN bundle install && \
 
 COPY . .
 COPY --from=frontend /public/spa /rails/public/spa
+COPY --from=frontend /frontend/dist /rails/frontend/dist
 RUN bundle exec bootsnap precompile -j 1 app/ lib/
 
 FROM base
