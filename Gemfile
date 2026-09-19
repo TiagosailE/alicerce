@@ -16,4 +16,10 @@ group :development, :test do
   gem "brakeman", require: false
   gem "bundler-audit", require: false
   gem "rubocop-rails-omakase", require: false
+  gem "rspec-rails"
+  gem "factory_bot_rails"
+end
+
+group :test do
+  gem "simplecov", require: false
 end
