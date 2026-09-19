@@ -81,6 +81,7 @@ jobs:
           docker run -d --name app --network host \
             -e DATABASE_URL=postgres://alicerce:alicerce@127.0.0.1:5432/alicerce_production \
             -e SECRET_KEY_BASE="$(openssl rand -hex 64)" \
+            -e SEED_USER_PASSWORD="$(openssl rand -hex 32)" \
             -e APP_HOST=127.0.0.1 \
             -e WEB_CONCURRENCY=0 -e RAILS_MAX_THREADS=3 -e SOLID_QUEUE_IN_PUMA=1 -e JOB_THREADS=1 \
             alicerce:ci
