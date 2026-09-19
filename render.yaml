@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: alicerce
+    runtime: docker
+    plan: free
+    region: virginia
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /up
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY_BASE
+        generateValue: true
+      # Render injects WEB_CONCURRENCY=1, which forks a Puma worker and doubles memory on a 512 MB instance.
+      - key: WEB_CONCURRENCY
+        value: "0"
+      - key: RAILS_MAX_THREADS
+        value: "3"
+      - key: SOLID_QUEUE_IN_PUMA
+        value: "1"
+      - key: JOB_THREADS
+        value: "1"

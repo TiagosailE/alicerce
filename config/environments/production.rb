@@ -1,5 +1,7 @@
 require "active_support/core_ext/integer/time"
 
+app_host = ENV.fetch("APP_HOST") { ENV.fetch("RENDER_EXTERNAL_HOSTNAME") }
+
 Rails.application.configure do
   config.enable_reloading = false
   config.eager_load = true
@@ -9,7 +11,7 @@ Rails.application.configure do
   config.assume_ssl = true
   config.force_ssl = true
   config.ssl_options = { redirect: { exclude: ->(request) { request.path == "/up" } } }
-  config.hosts = [ ENV.fetch("APP_HOST") ]
+  config.hosts = [ app_host ]
   config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
 
   config.log_tags = [ :request_id ]
@@ -20,7 +22,7 @@ Rails.application.configure do
 
   config.cache_store = :solid_cache_store
   config.active_job.queue_adapter = :solid_queue
-  config.action_mailer.default_url_options = { host: ENV.fetch("APP_HOST"), protocol: "https" }
+  config.action_mailer.default_url_options = { host: app_host, protocol: "https" }
 
   config.i18n.fallbacks = true
   config.active_record.dump_schema_after_migration = false
