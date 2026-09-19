@@ -26,17 +26,17 @@ These are the rules the invariants depend on. The reasoning behind each lives in
 | Topic | Rule |
 |---|---|
 | Available stock | `available = on_hand - reserved` per product and warehouse. Approving a sales order reserves only what is available, under the balance lock. |
-| Reservation lifecycle | Approval reserves; each partial invoice consumes its share; cancelling the order releases the rest. An approved order cannot be edited: returning it to draft releases its reservation. Reservations do not expire in Milestone 1. |
-| Lock order | Balance rows are locked in ascending `(product_id, warehouse_id)` order; the document number counter is locked last. A missing balance row is created with `INSERT ... ON CONFLICT DO NOTHING` before locking. |
-| Cost | Moving average per product and warehouse, kept as the inventory value in cents on the balance row. An issue takes value in proportion to quantity, so the sum of movement values always equals the balance value, with no per-unit rounding drift. Every outgoing movement stores its cost, which is the source of cost of goods sold. A receipt into zero or negative stock resets the average to the incoming cost. |
+| Reservation lifecycle | Approval reserves; each partial invoice consumes its share; cancelling the order releases what was not invoiced. An approved order cannot be edited: returning it to draft releases its reservation. Cancelling an invoice of an open order reserves the returned quantities for that order again. Reservations do not expire in Milestone 1. |
+| Lock order | One global order for every command: idempotency key, documents and their lines, balances in ascending `(product_id, warehouse_id)`, financial titles then installments, document number counters. A missing balance row is created with `INSERT ... ON CONFLICT DO NOTHING` before locking (ADR 0004). |
+| Cost | Moving average per product and warehouse, kept as the inventory value in cents on the balance row with the last receipt cost. An issue takes value in proportion to quantity; at zero or negative stock it takes the last receipt cost, and the receipt that clears negative stock posts a revaluation movement. Every movement stores its value, so movements always add up to the balance value and are the source of cost of goods sold (ADR 0006). |
 | Quantities | Decimal with three places (sand by the cubic meter); never floats. Purchase units convert to the stock unit with a per-product factor. |
-| Rounding | Half up, applied only to document totals. Installments split a total equally and the first installment takes the remaining cents, so installments always add up to the total. |
+| Rounding | Half up, at named points only: line totals, partial invoice amounts (the invoice that completes a line takes the remainder), issue costs, unit conversions and allocation. Allocation gives each part the total divided by the count rounded down and one extra cent to the first parts until the remainder is used: 10.001 in 3 is 3.334, 3.334, 3.333 (ADR 0006). |
 | Overdue | Derived, never stored: an open installment whose due date is before today in the organization's time zone. |
 | Settlements | Each settlement records principal, interest, fine and discount separately. Paying more than the open balance is rejected. |
 | Reversals | Cancelling an invoice returns the stock at the cost it left with and cancels its receivables; it is refused while any installment has a settlement, which must be reversed first. Reversals are new records, never edits. |
-| Idempotency keys | Unique per organization. A repeated key with the same request returns the stored outcome; with a different request body it is rejected. Only final outcomes are stored. The UI creates the key when a form opens and keeps it until the form is submitted successfully. |
+| Idempotency keys | Unique per organization and user. A repeated key with the same method, path and body replays the original status and the resource; with a different request it is rejected. Only successes are stored, so a failed attempt can be retried with the same key. The UI keeps a key across network errors, 5xx and 409, and creates a new one after any other response (ADR 0005). |
 | Document numbers | Sequential per organization and document type, assigned inside the transaction that creates the document. |
-| Audit | Records actor, organization, action, record ids, changed field names and before and after values, except fields that hold personal data, which are recorded as changed without their values. |
+| Audit | Records actor, organization, action, record ids, changed field names and before and after values, except personal data and free-text fields, which are recorded as changed without their values, and an IP prefix instead of the address (ADR 0010). |
 
 ## MVP
 
@@ -51,7 +51,7 @@ These are the rules the invariants depend on. The reasoning behind each lives in
 | Sales | Sales order, approval with reservation, partial invoicing that issues stock and creates receivables atomically, invoice cancellation, order cancellation that releases reservations |
 | Finance | Payables and receivables in installments, partial settlements with interest, fine and discount, settlement reversal, overdue status, cash and bank accounts, cash position |
 | Audit | Append-only trail of every relevant change, protected against UPDATE and DELETE in the database |
-| Delivery | Public demo with a test user and nightly data reset, README in English and Portuguese with screenshots, ADRs, OpenAPI document. The demo role cannot send email, invite users or change authentication settings. |
+| Delivery | Public demo with test users and nightly data reset, README in English and Portuguese with screenshots, ADRs, OpenAPI document. Demo users are flagged: whatever their role, they cannot send email, invite users or change authentication settings (ADR 0008). |
 
 ### Milestone 2: insight and compliance
 

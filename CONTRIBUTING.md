@@ -77,9 +77,26 @@ Non-negotiable. Each gets a dedicated test in the slice that implements it; the 
 1. Stock on hand never goes below zero unless a recorded authorization grants a negative allowance; the database checks `on_hand >= -negative_allowance`.
 2. Invoicing and its stock issue are atomic, as are receiving and stock entry, and every reversal.
 3. Critical writes are idempotent through an `Idempotency-Key`.
-4. Stock changes lock balance rows pessimistically, in ascending `(product_id, warehouse_id)` order.
+4. Rows are locked pessimistically in one global order: idempotency key, documents and lines, balances by `(product_id, warehouse_id)`, titles then installments, counters (ADR 0004).
 5. Orders, receipts, invoices and financial titles change state only through their state machine.
 6. Money is integer cents with an explicit currency. No floats.
+
+## API contract
+
+- Routes under `/api/v1`; state changes are sub-resources (`POST /api/v1/sales_orders/:id/approval`), not a writable `status`.
+- Success is `{ "data": ... }`, lists add `meta` (`page`, `per_page`, `total`). Errors are `{ "error": { "code", "message", "details", "request_id" } }`.
+- 401 unauthenticated, 403 a visible record the policy denies, 404 missing or another organization's record, 409 invalid transition or `conflict_retry`, 422 validation and domain failures, 429 rate limited.
+- Money as `*_cents` integers plus `currency`, quantities as decimal strings (`"12.500"`), one name per field.
+- Critical writes require `Idempotency-Key`; state-changing requests send `X-CSRF-Token`.
+- The OpenAPI document is written first; request specs validate every response against it and the SPA types are generated from it.
+
+## Tests
+
+- Specs describe behavior; every invariant and every allowed and forbidden transition has one.
+- The suite connects as the app role, under row level security, like production.
+- A route inventory spec fails when a route under `/api/v1` lacks an isolation entry (another organization's records must answer 404 and stay unchanged) or an entry in the role matrix spec.
+- Concurrency specs use real threads released together; money specs assert exact cents, not only sums.
+- Browser tests run against the production image in CI.
 
 ## Security rules for new code
 
@@ -104,6 +121,7 @@ Non-negotiable. Each gets a dedicated test in the slice that implements it; the 
 ## Never
 
 - Never update `inventory_balances` outside the inventory commands, and never with `update_column` or `update_all`.
+- Never lock rows outside the global order of ADR 0004, and never use `load_async` or threads on tenant tables inside a request.
 - Never change a document's status with `update!(status:)`; call its transition.
 - Never call `unscoped` or `find` on a tenant model outside the tenant scope.
 - Never compute with `Float` in Ruby or `number` arithmetic in TypeScript on money.

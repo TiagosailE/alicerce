@@ -9,10 +9,11 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | Control | Status | Evidence |
 |---|---|---|
 | `organization_id` on every tenant table, scope fails closed without a current organization | designed, slice 1 | ADR 0003 |
-| Postgres RLS with `FORCE`, policies on `app.organization_id`, non-bypass application role in production | designed, slice 1 | ADR 0003, `docs/deploy.md` |
-| RLS proven with a non-superuser probe role and raw SQL | designed, slice 1 | ADR 0003 |
-| Every `/api/v1` route in an isolation spec; a route without an entry fails the suite | designed, slice 1 | `CONTRIBUTING.md` (testing) |
-| Records of another organization answer 404, never 403 | designed, slice 1 | ADR 0003, api-contract rules in `CONTRIBUTING.md` |
+| Postgres RLS on business tables, audit, idempotency keys and invitations, policies on `app.organization_id` (null when unset or reset), app role without `BYPASSRLS` | designed, slice 1 | ADR 0003, `docs/deploy.md` |
+| The whole test suite connects as the app role with production grants, so every spec runs under RLS; raw SQL specs prove other organizations are invisible | designed, slice 1 | ADR 0003 |
+| The tenant setting lives on a connection leased for the whole request and is reset on checkin | designed, slice 1 | ADR 0003 |
+| Every `/api/v1` route in an isolation spec; a route without an entry fails the suite | designed, slice 1 | `CONTRIBUTING.md` (Tests) |
+| Records of another organization answer 404, never 403 | designed, slice 1 | ADR 0003, `CONTRIBUTING.md` (API contract) |
 
 ## Authentication and sessions
 
@@ -21,7 +22,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | bcrypt cost 12, 12 to 72 byte passwords, common password check | designed, slice 1 | ADR 0007 |
 | Rate limits on sign-in, reset and invitation acceptance; no hard lockout | designed, slice 1 | ADR 0007 |
 | Database sessions storing only token digests; rotation on sign-in, organization switch and role or password change; revocation | designed, slice 1 | ADR 0007 |
-| Idle (8 h) and absolute (7 d) session expiry | designed, slice 1 | ADR 0007 |
+| Idle (30 min) and absolute (12 h) session expiry (ASVS 3.3.2) | designed, slice 1 | ADR 0007 |
 | Single-use reset token, 20 minute expiry, uniform responses | designed, slice 1 | ADR 0007 |
 | Timing-safe comparison of tokens and codes | designed, slice 1 | ADR 0007 |
 | Optional TOTP with recovery codes | designed, slice 7 | ADR 0007 |
@@ -114,9 +115,12 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 
 | Risk | Why it is accepted | Mitigation |
 |---|---|---|
-| Development and CI connect as a superuser, which bypasses RLS | local convenience and migrations | RLS is tested with a non-superuser probe role; production uses a non-bypass role |
+| Identity tables (users, organizations, memberships, sessions) are not under tenant RLS | they are read before a tenant is known | a few named access paths, each covered by isolation specs (ADR 0003) |
+| Passwords limited to 72 bytes, below the 64 characters ASVS 2.1.2 asks for when many are accented | bcrypt limit in Rails 8.1 | ASCII passphrases up to 72 characters work; migration path in ADR 0007 |
+| Distributed password guessing against one account from many IPs | a per-account limit would let anyone lock the account out | per IP and per IP and email limits, password policy, optional TOTP |
+| A raw SQL write could set an invalid status transition | the database restricts states, the domain restricts transitions | only commands write documents; the audit trail records every transition (ADR 0009) |
 | Passwords hashed with bcrypt, not argon2id | Rails 8.1 `has_secure_password` supports bcrypt only; a custom hasher adds more risk than it removes | cost 12, 72 byte limit enforced, migration path in ADR 0007 |
 | Free hosting: no managed backups, instance may restart, availability depends on a keep-alive ping | the demo must cost nothing | CI dumps and restore test; the demo tolerates restarts (ADR 0002) |
-| The public demo account is shared by visitors | it is a demo | restricted demo role, nightly reset |
+| The public demo accounts are shared by visitors | it is a demo | demo flag denies invitations, email and authentication settings; no session list or IP stored for demo users; nightly reset (ADR 0008) |
 | Console access in production bypasses the audit trail | needed for maintenance | only the maintainer has access; no production console in routine operations |
 | Rate limit counters live in Solid Cache and reset if it is cleared | acceptable window | limits are per minute; clearing is a manual action |

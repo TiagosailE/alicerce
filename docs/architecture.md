@@ -74,7 +74,7 @@ Only a context's commands write its tables. Cross-context effects (an invoice cr
 
 ## Data model (Milestone 1 core)
 
-Every table except `identity_users` and the infrastructure tables carries `organization_id` with row level security; it is omitted below for readability.
+Business tables, `audit_events`, `idempotency_keys` and `identity_invitations` carry `organization_id` under row level security; the identity tables used before a tenant is known (users, organizations, memberships, sessions) and the Solid Queue and Solid Cache tables do not (ADR 0003). `organization_id` is omitted below for readability.
 
 ```mermaid
 erDiagram
@@ -151,26 +151,26 @@ sequenceDiagram
   SPA->>API: POST /api/v1/sales_orders/184/invoices<br/>Idempotency-Key, X-CSRF-Token, lines
   API->>API: session lookup, set app.organization_id, authorize (policy)
   API->>Cmd: call(order, lines, actor, key)
-  Cmd->>DB: BEGIN
-  Cmd->>Idem: insert key (organization, key, scope, digest)
-  alt key already has a stored response
-    Idem-->>API: stored response (no effect)
+  Cmd->>DB: BEGIN, SET LOCAL lock_timeout = 3s
+  Cmd->>Idem: INSERT key (organization, user, key, digest) ON CONFLICT DO NOTHING RETURNING
+  alt key existed with the same digest
+    Idem-->>API: original status and the invoice as it is now (no effect)
   end
-  Cmd->>DB: SELECT order FOR UPDATE, re-read status
+  Cmd->>DB: lock the order and its lines, re-read status
   Cmd->>Inv: lock_for(pairs sorted by product, warehouse)
-  Inv->>DB: INSERT balances ON CONFLICT DO NOTHING<br/>SELECT ... FOR UPDATE (ascending)
+  Inv->>DB: INSERT balances ON CONFLICT DO NOTHING<br/>SELECT ... FOR NO KEY UPDATE (ascending)
   Cmd->>Cmd: check reserved quantities cover the lines
-  Cmd->>DB: lock document counter, create invoice and lines
   Cmd->>DB: movements out (quantity, cost from value), consume reservations, update balances
-  Cmd->>Fin: create receivable, allocate installments (first takes remaining cents)
+  Cmd->>Fin: create receivable title and installments (allocation, first parts take the extra cents)
+  Cmd->>DB: lock the document counters last, number the invoice and the title
   Cmd->>DB: order.transition_to!(partially_invoiced or invoiced)
-  Cmd->>DB: audit event, store response on idempotency key
+  Cmd->>DB: audit event, store status and invoice id on the idempotency key
   Cmd->>DB: COMMIT
   Cmd-->>API: Result.success(invoice)
   API-->>SPA: 201 { data: invoice }
 ```
 
-If any step fails, the transaction rolls back entirely: no invoice without stock issue, no stock issue without receivable, and the idempotency key is gone too, so the retry runs again.
+If any step fails, the transaction rolls back entirely: no invoice without stock issue, no stock issue without receivable, and the idempotency key is gone too, so the retry runs again. A lock timeout or deadlock answers 409 and the SPA retries with the same key (ADR 0004, 0005).
 
 ## Request lifecycle
 
