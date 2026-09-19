@@ -5,26 +5,29 @@
 
 ## Context
 
-Each organization has people with different jobs: the owner, an administrator, purchasing, sales, finance, and read-only accountants. An ERP leaks through authorization gaps as often as through tenant gaps: a salesperson approving their own discount, a read-only user settling a title. Authorization must be explicit per action, testable as a matrix, and impossible to forget on a new endpoint. Tenant isolation is a separate layer (ADR 0003); policies assume they only ever see records of the current organization.
+Each organization has people with different jobs: the owner, an administrator, purchasing, sales, finance and read-only accountants. An ERP leaks through authorization gaps as often as through tenant gaps: a read-only accountant settling a title, a salesperson cancelling an invoice that finance already reconciled. Authorization must be explicit per action, testable as a matrix, and impossible to forget on a new endpoint. Tenant isolation is a separate layer (ADR 0003); policies only ever see records of the current organization.
+
+The public demo adds a constraint: visitors must see the full loop, which needs broad permissions, yet must not invite people, send email or change authentication settings.
 
 ## Options
 
-| | Checks in controllers | Pundit | Action Policy | Permission tables editable per organization |
+| | Checks in controllers | Pundit | Action Policy | Permission tables per organization |
 |---|---|---|---|---|
-| Forgetting a check is caught | no | `verify_authorized` and `verify_policy_scoped` fail the request | same, plus pre-checks | depends |
+| Forgetting a check is caught | no | `verify_authorized` and `verify_policy_scoped` fail the request | same | depends |
 | Familiarity for reviewers | high | high | lower | n/a |
 | Test as a matrix | awkward | policy specs per action | same | needs data setup |
-| Scope of the MVP | n/a | fits fixed roles | fits, more features than needed | more than needed |
+| Fits fixed roles in the MVP | n/a | yes | yes, more than needed | more than needed |
 
 ## Decision
 
 - Pundit, one policy per model in `app/policies/<context>/`, inheriting `ApplicationPolicy`, where every rule returns false unless overridden.
-- The API base controller calls `after_action :verify_authorized` on every action and `verify_policy_scoped` on index actions. Skipping either requires a line in the pull request explaining why (only the session and health endpoints do).
-- Roles are fixed per membership: `owner`, `admin`, `purchasing`, `sales`, `finance`, `read_only`. A role is a column on the membership, not a table. Policies ask capabilities (`can_approve_sales?`) defined in one module that maps roles to capabilities, so the matrix lives in one file.
-- Denials for records the user can see answer 403 `forbidden`; records outside the tenant never reach a policy and answer 404.
-- The SPA hides actions the API reports as not allowed (each resource response includes an `allowed_actions` list computed from the policy), but the API is the only enforcement.
+- The API base controller runs `verify_authorized` after every action and `verify_policy_scoped` after index actions. Only the session and health endpoints skip them, and say why in code.
+- Roles are fixed per membership: `owner`, `admin`, `purchasing`, `sales`, `finance`, `read_only`, a column on the membership. Policies ask capabilities (`can_approve_sales?`) defined in one module that maps roles to capabilities, so the matrix lives in one file and generates the matrix spec.
+- Demo users are ordinary memberships with a `demo` flag on the user. The capability module denies `manage_members`, `send_email` and `manage_authentication` to demo users regardless of role.
+- A denied action on a record the user can see answers 403 `forbidden`; records outside the tenant never reach a policy and answer 404 (ADR 0003).
+- Detail responses include `allowed_actions`, computed from the policy, so the SPA can show only what the API would accept; list responses do not. The API remains the only enforcement.
 
-Initial matrix (M1):
+Initial matrix (Milestone 1):
 
 | Capability | owner | admin | purchasing | sales | finance | read_only |
 |---|---|---|---|---|---|---|
@@ -40,10 +43,10 @@ Initial matrix (M1):
 ## Consequences
 
 - A new endpoint without `authorize` fails its first request spec.
-- The authorization matrix spec generates one example per endpoint and role from this table, so changing the table changes the tests.
+- Changing the matrix changes the tests, because the spec is generated from it.
 - Organizations cannot customize roles in the MVP.
 
 ## What would make me change my mind
 
 - Customers asking for custom roles: capabilities become rows per organization, still behind the same capability methods, in a new ADR.
-- Field-level rules (hiding cost from sales): serializer-level checks through the same capabilities.
+- Field-level rules (hiding cost from sales): serializer checks through the same capabilities.
