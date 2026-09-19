@@ -4,6 +4,8 @@ module Api
     # 0008): there is no policy to check before a session exists, and once one
     # exists this controller only ever acts on the caller's own session.
     class SessionsController < BaseController
+      skip_after_action :verify_authorized
+
       rate_limit to: 10, within: 3.minutes, name: "session_create_ip", only: :create
       rate_limit to: 5, within: 3.minutes, name: "session_create_ip_email", only: :create,
         by: -> { "#{request.remote_ip}:#{params[:email].to_s.strip.downcase}" }

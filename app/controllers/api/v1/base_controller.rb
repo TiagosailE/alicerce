@@ -2,14 +2,27 @@ module Api
   module V1
     class BaseController < ActionController::API
       include ActionController::Cookies
+      include Pundit::Authorization
 
       SESSION_COOKIE = "__Host-session"
 
       rescue_from ActionController::ParameterMissing, with: :render_parameter_missing
       rescue_from ActionController::TooManyRequests, with: :render_rate_limited
       rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
+      rescue_from Pundit::NotAuthorizedError, with: :render_forbidden
 
       before_action :resume_session
+      around_action :with_tenant_setting
+
+      # Every action must authorize (ADR 0008); a forgotten call raises
+      # Pundit::AuthorizationNotPerformedError, which nothing here rescues,
+      # so it surfaces as a failing spec, not a silent gap. Every index
+      # action must also scope its query through a policy Scope. Conditions
+      # are procs, not `only:`/`except:` symbols, because not every subclass
+      # defines an index action, and Rails 7.1+ raises when a callback
+      # references one that does not exist on the class handling the request.
+      after_action :verify_authorized, unless: -> { action_name == "route_not_found" }
+      after_action :verify_policy_scoped, if: -> { action_name == "index" }
 
       # Routed directly from config/routes.rb for any /api/* path that
       # matched no other route, so unknown API paths get the JSON error
@@ -19,6 +32,9 @@ module Api
       end
 
       private
+        # Pundit calls this to get the actor authorize and policy_scope see.
+        def pundit_user = Current.user
+
         def resume_session
           token = cookies[SESSION_COOKIE]
           return if token.blank?
@@ -29,6 +45,18 @@ module Api
           Current.session = record
           Current.user = record.user
           Current.organization = record.organization
+        end
+
+        # Leases the connection for the rest of the request and sets the RLS
+        # tenant (ADR 0003); a no-op until Current.organization exists (the
+        # session endpoints, and GET /session before signing in). Reset in an
+        # ensure here, with TenantSetting.install! as a second line of
+        # defense on the connection pool itself.
+        def with_tenant_setting
+          TenantSetting.apply!(Current.organization.id) if Current.organization
+          yield
+        ensure
+          TenantSetting.clear!
         end
 
         def require_authentication!
@@ -100,6 +128,10 @@ module Api
 
         def render_not_found
           render_error(status: :not_found, code: "not_found", message: "Not found")
+        end
+
+        def render_forbidden
+          render_error(status: :forbidden, code: "forbidden", message: "Not allowed")
         end
     end
   end
