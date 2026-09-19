@@ -11,6 +11,9 @@ gem "solid_cache"
 gem "solid_queue"
 gem "tzinfo-data", platforms: %i[windows jruby]
 
+# ActiveSupport 8.1.3 calls JSON.parse with a positional options hash, which json 3 rejects.
+gem "json", "< 3"
+
 group :development, :test do
   gem "debug", platforms: %i[mri windows], require: "debug/prelude"
   gem "brakeman", require: false
