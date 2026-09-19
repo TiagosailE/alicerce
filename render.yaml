@@ -10,6 +10,8 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      - key: MIGRATION_DATABASE_URL
+        sync: false
       - key: SECRET_KEY_BASE
         generateValue: true
       # Render injects WEB_CONCURRENCY=1, which forks a Puma worker and doubles memory on a 512 MB instance.

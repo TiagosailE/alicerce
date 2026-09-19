@@ -37,12 +37,12 @@ Without the market row, A wins or ties every criterion. The choice of B is the d
 Option B, with these specifics:
 
 - Rails runs with `config.api_only = true`. The cookie and session middleware are added back explicitly, API controllers include request forgery protection, and the CSRF token is sent by the SPA in the `X-CSRF-Token` header.
-- The SPA shell (`index.html`) is rendered by a Rails controller, not served as a static file, so every response carries the CSP header and the CSRF token. Deep links fall through to that controller; `/api` and `/up` never do.
+- The SPA shell (`index.html`) is built outside `public/` and rendered by a Rails controller, so every shell response carries the CSP header. The SPA reads its CSRF token from the session endpoint. Page navigations fall through to that controller; `/api`, `/spa` and `/up` never do.
 - React escapes output by default; `dangerouslySetInnerHTML` is forbidden by lint. HttpOnly cookies do not stop an XSS from calling the API from inside the page, so CSP with `script-src 'self'` and no inline scripts is the real control.
 - Response schemas in the OpenAPI document are strict (`required` fields and `additionalProperties: false`). CI regenerates the document and the TypeScript types and fails when they differ from what is committed.
 - Money is never computed in the SPA. Totals come from the API.
 
-Pinned toolchain (exact versions in `mise.toml`, `Gemfile.lock` and `package-lock.json`): Ruby 4.0, Rails 8.1, PostgreSQL 18, Node 24 LTS, TypeScript 6.0, React 19, Vite, TanStack Query, React Router. Each further dependency is justified in the commit that adds it.
+Pinned toolchain (exact versions in `.ruby-version`, `.node-version`, the Dockerfile base images, `Gemfile.lock` and `package-lock.json`): Ruby 4.0, Rails 8.1, PostgreSQL 18, Node 24 LTS, TypeScript 6.0, React 19, Vite, TanStack Query, React Router. Each further dependency is justified in the commit that adds it.
 
 ## Consequences
 
@@ -54,11 +54,15 @@ Positive
 Negative
 - Two toolchains, two linters, two test runners.
 - UI work is slower than with Hotwire. A small set of shared components (data table, form field, money input, status badge) is built when the second screen needs it, not before.
-- API mode drops framework defaults that A would provide; each one added back is listed above and covered by a test.
+- API mode drops framework defaults that A would provide. The CSP middleware is back and tested; cookies, the session store and request forgery protection come back with authentication in slice 1, each with a test.
 - Logic in the browser needs real browser tests. Playwright covers the money flows end to end.
 
 ## What would make me change my mind
 
 - Evidence that the target market values Hotwire or full-stack TypeScript over React with a Rails backend (a count of relevant job posts, or a concrete target role). Node-specific roles would trigger an ADR on porting the API; the SPA and the contract would survive.
 - If slices 1 and 2 together show more lines changed in the SPA than in the backend and its tests, the UI cost is dominating domain work, and a new ADR evaluates replacing the SPA with Hotwire. The two are never mixed without that ADR.
-- If Ruby 4.0 blocks a required gem, Ruby 3.4 is the fallback, recorded in the commit that changes `mise.toml`.
+- If Ruby 4.0 blocks a required gem, Ruby 3.4 is the fallback, recorded in the commit that changes `.ruby-version`.
+
+## Amendments
+
+- 2026-09-19: corrected where versions are pinned (not `mise.toml`), where the shell is built, and which API mode defaults are already restored. The decision is unchanged.
