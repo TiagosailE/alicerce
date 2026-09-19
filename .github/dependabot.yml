@@ -15,6 +15,13 @@ updates:
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # typescript-eslint supports TypeScript below 6.1; lift when it supports 7.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # Types follow the Node runtime major pinned in .node-version.
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
