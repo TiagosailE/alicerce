@@ -25,3 +25,14 @@ for (const path of ["/", "/estoque/produtos/42"]) {
     expect(await page.evaluate(() => window.cspViolations)).toEqual([]);
   });
 }
+
+test("detects a violation, so the checks above cannot pass vacuously", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => {
+    const style = document.createElement("style");
+    style.textContent = "body { color: red }";
+    document.head.append(style);
+  });
+
+  await expect.poll(() => page.evaluate(() => window.cspViolations.length)).toBeGreaterThan(0);
+});
