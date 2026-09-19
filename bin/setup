@@ -11,6 +11,7 @@ FileUtils.chdir APP_ROOT do
   puts "== Installing dependencies =="
   system("bundle check") || system!("bundle install")
   system! "npm --prefix frontend ci"
+  system! "git config core.hooksPath .githooks" if File.directory?(".git")
 
   puts "
 == Preparing database =="
