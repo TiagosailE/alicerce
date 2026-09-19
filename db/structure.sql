@@ -10,6 +10,64 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+--
+-- Name: audit_events_append_only(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.audit_events_append_only() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_user <> (SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = 'audit_events') THEN
+    RAISE EXCEPTION 'audit_events is append-only: % is not permitted for %', TG_OP, current_user;
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+
+--
+-- Name: audit_purge(bigint, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.audit_purge(target_organization_id bigint, purge_before timestamp with time zone) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+  purged_count bigint;
+BEGIN
+  DELETE FROM audit_events
+  WHERE organization_id = target_organization_id AND created_at < purge_before;
+
+  GET DIAGNOSTICS purged_count = ROW_COUNT;
+  RETURN purged_count;
+END;
+$$;
+
+
+--
+-- Name: audit_redact(bigint, character varying, bigint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.audit_redact(target_organization_id bigint, target_subject_type character varying, target_subject_id bigint) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+  redacted_count bigint;
+BEGIN
+  UPDATE audit_events
+  SET field_changes = '{"redacted": true}'::jsonb
+  WHERE organization_id = target_organization_id
+    AND subject_type = target_subject_type
+    AND subject_id = target_subject_id;
+
+  GET DIAGNOSTICS redacted_count = ROW_COUNT;
+  RETURN redacted_count;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -27,6 +85,43 @@ CREATE TABLE public.ar_internal_metadata (
 
 
 --
+-- Name: audit_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.audit_events (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    actor_user_id bigint NOT NULL,
+    action character varying NOT NULL,
+    subject_type character varying NOT NULL,
+    subject_id bigint NOT NULL,
+    field_changes jsonb DEFAULT '{}'::jsonb NOT NULL,
+    request_id character varying,
+    ip_prefix character varying,
+    created_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: audit_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.audit_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: audit_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.audit_events_id_seq OWNED BY public.audit_events.id;
+
+
+--
 -- Name: identity_memberships; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -37,7 +132,7 @@ CREATE TABLE public.identity_memberships (
     role character varying NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT identity_memberships_role_valid CHECK (((role)::text = ANY ((ARRAY['owner'::character varying, 'admin'::character varying, 'purchasing'::character varying, 'sales'::character varying, 'finance'::character varying, 'read_only'::character varying])::text[])))
+    CONSTRAINT identity_memberships_role_valid CHECK (((role)::text = ANY (ARRAY[('owner'::character varying)::text, ('admin'::character varying)::text, ('purchasing'::character varying)::text, ('sales'::character varying)::text, ('finance'::character varying)::text, ('read_only'::character varying)::text])))
 );
 
 
@@ -649,6 +744,13 @@ ALTER SEQUENCE public.solid_queue_semaphores_id_seq OWNED BY public.solid_queue_
 
 
 --
+-- Name: audit_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events ALTER COLUMN id SET DEFAULT nextval('public.audit_events_id_seq'::regclass);
+
+
+--
 -- Name: identity_memberships id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -780,6 +882,14 @@ ALTER TABLE ONLY public.solid_queue_semaphores ALTER COLUMN id SET DEFAULT nextv
 
 ALTER TABLE ONLY public.ar_internal_metadata
     ADD CONSTRAINT ar_internal_metadata_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: audit_events audit_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT audit_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -932,6 +1042,34 @@ ALTER TABLE ONLY public.solid_queue_scheduled_executions
 
 ALTER TABLE ONLY public.solid_queue_semaphores
     ADD CONSTRAINT solid_queue_semaphores_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_on_organization_id_subject_type_subject_id_2d8753274e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_organization_id_subject_type_subject_id_2d8753274e ON public.audit_events USING btree (organization_id, subject_type, subject_id);
+
+
+--
+-- Name: index_audit_events_on_actor_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_actor_user_id ON public.audit_events USING btree (actor_user_id);
+
+
+--
+-- Name: index_audit_events_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_organization_id ON public.audit_events USING btree (organization_id);
+
+
+--
+-- Name: index_audit_events_on_organization_id_and_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_audit_events_on_organization_id_and_created_at ON public.audit_events USING btree (organization_id, created_at);
 
 
 --
@@ -1229,6 +1367,21 @@ CREATE INDEX index_solid_queue_semaphores_on_key_and_value ON public.solid_queue
 
 
 --
+-- Name: audit_events audit_events_append_only; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER audit_events_append_only BEFORE DELETE OR UPDATE ON public.audit_events FOR EACH ROW EXECUTE FUNCTION public.audit_events_append_only();
+
+
+--
+-- Name: audit_events fk_rails_2e3720791c; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT fk_rails_2e3720791c FOREIGN KEY (actor_user_id) REFERENCES public.identity_users(id);
+
+
+--
 -- Name: solid_queue_recurring_executions fk_rails_318a5533ed; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1317,11 +1470,32 @@ ALTER TABLE ONLY public.solid_queue_batch_executions
 
 
 --
+-- Name: audit_events fk_rails_be0ed9e37f; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.audit_events
+    ADD CONSTRAINT fk_rails_be0ed9e37f FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: solid_queue_scheduled_executions fk_rails_c4316f352d; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.solid_queue_scheduled_executions
     ADD CONSTRAINT fk_rails_c4316f352d FOREIGN KEY (job_id) REFERENCES public.solid_queue_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: audit_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: audit_events audit_events_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
 
 
 --
@@ -1331,6 +1505,7 @@ ALTER TABLE ONLY public.solid_queue_scheduled_executions
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260919110000'),
 ('20260919100000'),
 ('20260919000002'),
 ('20260919000001');
