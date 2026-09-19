@@ -27,4 +27,8 @@ end
 
 group :test do
   gem "simplecov", require: false
+
+  # Validates request spec responses against docs/openapi/openapi.yaml (ADR 0011),
+  # which no gem already in the bundle does.
+  gem "committee", require: false
 end

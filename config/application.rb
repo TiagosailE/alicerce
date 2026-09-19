@@ -20,6 +20,14 @@ module Alicerce
       "x-frame-options" => "DENY",
       "permissions-policy" => "camera=(), microphone=(), geolocation=(), usb=(), payment=(), fullscreen=(self)"
     )
+
+    # API mode drops cookies and the session middleware; ADR 0007 needs both
+    # back for the CSRF token cookie (the actual sign-in token is a separate,
+    # hand-managed cookie, never put in the Rails session).
+    config.session_store :cookie_store, key: "__Host-csrf", secure: true, httponly: true, same_site: :lax
+    config.middleware.use ActionDispatch::Cookies
+    config.middleware.use config.session_store, config.session_options
+
     config.time_zone = "Brasilia"
     config.active_record.schema_format = :sql
     config.x.spa_index = Rails.root.join("frontend/dist/index.html")
