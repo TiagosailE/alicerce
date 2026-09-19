@@ -8,32 +8,35 @@ Alicerce is a multi-tenant ERP for small Brazilian distributors. The core is the
 
 | Piece | Version | Pinned in |
 |---|---|---|
-| Ruby | 4.0.7 | `.ruby-version` |
+| Ruby | 4.0.7 | `.ruby-version` and the `Dockerfile` base image (bump both) |
 | Rails | 8.1.3 | `Gemfile.lock` |
-| PostgreSQL | 18 | `compose.yaml` |
-| Node | 24.21.0 | `.node-version` |
+| PostgreSQL | 18.6 | `compose.yaml` and the CI service, by digest |
+| Node | 24.21.0 | `.node-version` and the `Dockerfile` build image (bump both) |
 | TypeScript | 6.0.3 | `frontend/package-lock.json` |
 | React / Vite / Tailwind | 19.3 / 8.3 / 4.3 | `frontend/package-lock.json` |
 
-Jobs (Solid Queue) and cache (Solid Cache) live in the primary database. mise reads `.ruby-version` and `.node-version`.
+Jobs (Solid Queue, as threads inside Puma) and cache (Solid Cache) live in the primary database. mise reads `.ruby-version` and `.node-version`. `json` stays below 3 until Rails stops passing it positional options.
 
 ## Commands
 
 | Task | Command |
 |---|---|
-| First run: dependencies, database, seeds, servers | `bin/setup` |
+| First run: dependencies, database, servers | `bin/setup` |
 | Start Rails (:3000) and Vite (:5173) | `bin/dev` |
-| Every check, exactly as CI runs it | `bin/ci` |
+| Every check that runs locally | `bin/ci` |
 | Ruby tests | `bin/rspec` |
 | Frontend tests | `npm --prefix frontend test` |
+| Browser tests against a running production-like server | `E2E_BASE_URL=http://127.0.0.1:10000 npm --prefix frontend run e2e` |
 | Lint | `bin/rubocop`, `npm --prefix frontend run lint` |
 | Format and typecheck the frontend | `npm --prefix frontend run format`, `npm --prefix frontend run typecheck` |
 | Migrate | `bin/rails db:migrate` |
-| Reset the database with demo data | `bin/setup --reset --skip-server` |
+| Reset the database | `bin/setup --reset --skip-server` |
 | Security checks | `bin/brakeman`, `bin/bundler-audit check --update`, `npm --prefix frontend audit` |
 | Database only | `docker compose up -d --wait db` |
 
-`bin/setup` starts Postgres through Docker Compose on port 5433. To use a Postgres you already run, export `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` first. Every variable the app reads is listed in `.env.example`.
+`bin/setup` starts Postgres through Docker Compose on 127.0.0.1:5433. To use a Postgres you already run, export `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` first. Every variable the app reads is listed in `.env.example`. Demo seeds arrive with each slice's models.
+
+`bin/ci` runs lint, types, audits, Brakeman, the Ruby and frontend tests, the SPA build and a production header check. CI adds what cannot run locally: the production image started with Postgres (health, headers, Solid Queue, memory budget, a Chromium test that fails on any CSP violation), Trivy, gitleaks over the whole history, dependency review and CodeQL. A daily workflow audits dependencies on `main`.
 
 ## Where things live
 
@@ -52,7 +55,7 @@ Jobs (Solid Queue) and cache (Solid Cache) live in the primary database. mise re
 | `frontend/src/i18n/` | pt-BR strings |
 | `docs/adr/` | Architecture decision records |
 
-Contexts: `identity`, `catalog`, `inventory`, `purchasing`, `sales`, `finance`, `audit`.
+Contexts: `identity`, `catalog`, `inventory`, `purchasing`, `sales`, `finance`, `audit`. Folders are created by the slice that first needs them; this table says where they go.
 
 ## Conventions
 
@@ -69,7 +72,7 @@ Commits and branches
 
 ## Domain invariants
 
-Non-negotiable. Each has a dedicated test; the rules behind them are in [docs/scope.md](docs/scope.md).
+Non-negotiable. Each gets a dedicated test in the slice that implements it; the rules behind them are in [docs/scope.md](docs/scope.md).
 
 1. Stock on hand never goes below zero unless a recorded authorization grants a negative allowance; the database checks `on_hand >= -negative_allowance`.
 2. Invoicing and its stock issue are atomic, as are receiving and stock entry, and every reversal.
@@ -93,7 +96,7 @@ Non-negotiable. Each has a dedicated test; the rules behind them are in [docs/sc
 
 - [ ] `bin/ci` green locally and in CI.
 - [ ] New behavior has tests, including the authorization matrix per role and tenant isolation for new endpoints.
-- [ ] Migrations are reversible and safe to run while the app serves traffic.
+- [ ] Migrations are reversible and pass strong_migrations without `safety_assured`, or the pull request explains each use.
 - [ ] OpenAPI document and generated TypeScript types updated together.
 - [ ] Decisions that are hard to reverse have an ADR.
 - [ ] This file updated in the same pull request when a command, path or convention changes.
@@ -104,7 +107,9 @@ Non-negotiable. Each has a dedicated test; the rules behind them are in [docs/sc
 - Never change a document's status with `update!(status:)`; call its transition.
 - Never call `unscoped` or `find` on a tenant model outside the tenant scope.
 - Never compute with `Float` in Ruby or `number` arithmetic in TypeScript on money.
-- Never serve the SPA shell as a static file: `SpaController` exists so the shell carries the CSP.
-- Never add `unsafe-inline` to the CSP.
+- Never serve the SPA shell as a static file: the build keeps `index.html` in `frontend/dist` and `SpaController` serves it with the CSP.
+- Never add `unsafe-inline` to the CSP, and never add a frontend library that injects `<style>` tags or inline scripts; the browser test in CI fails on it.
+- Never turn npm install scripts back on (`ignore-scripts` in `frontend/.npmrc`) without naming the package that needs them.
+- Never load the Solid Queue Puma plugin in fork mode on the 512 MB instance.
 - Never rescue `StandardError` in a command; expected failures are `Result` codes.
 - Never commit `.env` files or keys; `config/credentials` is not used.
