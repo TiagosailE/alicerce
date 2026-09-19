@@ -2,7 +2,7 @@ require "rails_helper"
 
 RSpec.describe Identity::CompletePasswordReset do
   it "fails with invalid_token for an unknown token" do
-    result = described_class.call(token: "not-a-real-token", password: "nova-senha-longa")
+    result = described_class.call(token: "not-a-real-token", new_password: "nova-senha-longa")
 
     expect(result).not_to be_success
     expect(result.error).to eq(:invalid_token)
@@ -12,7 +12,7 @@ RSpec.describe Identity::CompletePasswordReset do
     user = create(:user)
     token = travel_to(21.minutes.ago) { user.password_reset_token }
 
-    result = described_class.call(token:, password: "nova-senha-longa")
+    result = described_class.call(token:, new_password: "nova-senha-longa")
 
     expect(result).not_to be_success
     expect(result.error).to eq(:invalid_token)
@@ -22,7 +22,7 @@ RSpec.describe Identity::CompletePasswordReset do
     demo_user = create(:user, demo: true)
     token = demo_user.password_reset_token
 
-    result = described_class.call(token:, password: "nova-senha-longa")
+    result = described_class.call(token:, new_password: "nova-senha-longa")
 
     expect(result).not_to be_success
     expect(result.error).to eq(:invalid_token)
@@ -33,7 +33,7 @@ RSpec.describe Identity::CompletePasswordReset do
     user = create(:user, password: "senha-antiga-e-longa")
     token = user.password_reset_token
 
-    result = described_class.call(token:, password: "nova-senha-bem-longa")
+    result = described_class.call(token:, new_password: "nova-senha-bem-longa")
 
     expect(result).to be_success
     expect(result.value).to eq(user)
@@ -44,7 +44,7 @@ RSpec.describe Identity::CompletePasswordReset do
     user = create(:user)
     token = user.password_reset_token
 
-    result = described_class.call(token:, password: "curta")
+    result = described_class.call(token:, new_password: "curta")
 
     expect(result).not_to be_success
     expect(result.error).to eq(:validation_failed)
@@ -54,8 +54,8 @@ RSpec.describe Identity::CompletePasswordReset do
     user = create(:user)
     token = user.password_reset_token
 
-    first_attempt = described_class.call(token:, password: "primeira-troca-longa")
-    second_attempt = described_class.call(token:, password: "segunda-troca-longa")
+    first_attempt = described_class.call(token:, new_password: "primeira-troca-longa")
+    second_attempt = described_class.call(token:, new_password: "segunda-troca-longa")
 
     expect(first_attempt).to be_success
 
@@ -70,7 +70,7 @@ RSpec.describe Identity::CompletePasswordReset do
     Identity::Session.start!(user:, organization:, ip: "203.0.113.9", user_agent: "spec")
     token = user.password_reset_token
 
-    described_class.call(token:, password: "nova-senha-bem-longa")
+    described_class.call(token:, new_password: "nova-senha-bem-longa")
 
     expect(Identity::Session.count).to eq(0)
   end

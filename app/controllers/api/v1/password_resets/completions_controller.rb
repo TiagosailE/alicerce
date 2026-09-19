@@ -16,7 +16,7 @@ module Api
           token = params.expect(:token)
           password = params.expect(:password)
 
-          result = Identity::CompletePasswordReset.call(token:, password:)
+          result = Identity::CompletePasswordReset.call(token:, new_password: password)
           return render_result_error(result) unless result.success?
 
           head :no_content
