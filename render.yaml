@@ -14,6 +14,8 @@ services:
         sync: false
       - key: SECRET_KEY_BASE
         generateValue: true
+      - key: SEED_USER_PASSWORD
+        sync: false
       # Render injects WEB_CONCURRENCY=1, which forks a Puma worker and doubles memory on a 512 MB instance.
       - key: WEB_CONCURRENCY
         value: "0"
