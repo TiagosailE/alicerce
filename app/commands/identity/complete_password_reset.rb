@@ -25,6 +25,9 @@ module Identity
       return Result.failure(:invalid_token) if user.nil? || user.demo?
 
       ApplicationRecord.transaction do
+        # has_secure_password's password= setter hashes this into
+        # password_digest; the plain value itself never reaches a column
+        # (CodeQL alert 1, dismissed as a false positive for that reason).
         return Result.invalid(user) unless user.update(password: @new_password)
 
         Identity::Session.revoke_others_for!(user)
