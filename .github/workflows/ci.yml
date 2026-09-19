@@ -38,7 +38,22 @@ jobs:
   docker:
     name: Docker image
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: alicerce
+          POSTGRES_PASSWORD: alicerce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alicerce"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      MEMORY_BUDGET_MB: "450"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -50,8 +65,45 @@ jobs:
           tags: alicerce:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Boot the production image
-        run: docker run --rm -e SECRET_KEY_BASE_DUMMY=1 -e APP_HOST=ci.example alicerce:ci ./bin/rails runner 'puts Rails.env'
+      - name: Start the image with its default command, as Render runs it
+        run: |
+          docker run -d --name app --network host \
+            -e DATABASE_URL=postgres://alicerce:alicerce@127.0.0.1:5432/alicerce_production \
+            -e SECRET_KEY_BASE="$(openssl rand -hex 64)" \
+            -e APP_HOST=127.0.0.1 \
+            -e WEB_CONCURRENCY=0 -e RAILS_MAX_THREADS=3 -e SOLID_QUEUE_IN_PUMA=1 -e JOB_THREADS=1 \
+            alicerce:ci
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://127.0.0.1:10000/up && exit 0; sleep 2; done
+          exit 1
+      - name: Check the shell, its headers and the static shell path
+        run: |
+          curl -sf -H "Accept: text/html" -D headers.txt -o /dev/null http://127.0.0.1:10000/estoque
+          grep -qi "content-security-policy: default-src 'none'" headers.txt
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:10000/spa/index.html)" = 404
+      - name: Check that Solid Queue runs inside Puma
+        run: |
+          sleep 10
+          docker exec app bin/rails runner 'kinds = SolidQueue::Process.pluck(:kind); puts kinds.inspect; exit((%w[Worker Dispatcher Scheduler] - kinds).empty?)'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Browser smoke test under the production CSP
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test
+      - name: Check memory against the free instance budget
+        run: |
+          usage=$(docker stats --no-stream --format '{{.MemUsage}}' app | cut -d/ -f1)
+          echo "resident memory: $usage (budget ${MEMORY_BUDGET_MB} MB of 512 MB)"
+          mb=$(echo "$usage" | awk '{ v = $1; if (v ~ /GiB/) { sub(/GiB/, "", v); print v * 1024 } else { sub(/MiB/, "", v); print v } }')
+          awk -v mb="$mb" -v max="$MEMORY_BUDGET_MB" 'BEGIN { exit !(mb < max) }'
+      - name: Application logs
+        if: failure()
+        run: docker logs app
 
   secrets:
     name: Secret scan
