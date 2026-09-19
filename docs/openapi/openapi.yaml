@@ -95,6 +95,107 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
 
+  /invitations:
+    post:
+      operationId: createInvitation
+      summary: Invite someone to join the organization
+      description: Owner and admin only; denied to demo users regardless of role (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInvitationRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/InvitationResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /invitations/{token}/acceptance:
+    post:
+      operationId: acceptInvitation
+      summary: Accept a pending invitation
+      description: >
+        No session required (ADR 0003): holding the token is the only
+        credential this action recognizes. Signs the accepting user in on
+        success, the same as POST /session.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInvitationRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/SessionResponse"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /memberships/{id}:
+    patch:
+      operationId: updateMembership
+      summary: Change a member's role
+      description: Owner and admin only; denied to demo users regardless of role (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMembershipRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/MemberResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: destroyMembership
+      summary: Remove a member from the organization
+      description: Owner and admin only; denied to demo users regardless of role (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: The member was removed.
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
 components:
   parameters:
     CsrfToken:
@@ -124,6 +225,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AuditEventListResponseBody"
+    InvitationResponse:
+      description: A newly issued invitation, with its one-time token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/InvitationResponseBody"
+    MemberResponse:
+      description: A member of the current organization.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MemberResponseBody"
 
   schemas:
     User:
@@ -258,3 +371,76 @@ components:
           items: { $ref: "#/components/schemas/AuditEvent" }
         meta:
           $ref: "#/components/schemas/Meta"
+
+    CreateInvitationRequest:
+      type: object
+      additionalProperties: false
+      required: [ email, role ]
+      properties:
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [ owner, admin, purchasing, sales, finance, read_only ]
+
+    Invitation:
+      type: object
+      additionalProperties: false
+      required: [ id, email, role, expires_at, token ]
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [ owner, admin, purchasing, sales, finance, read_only ]
+        expires_at: { type: string, format: date-time }
+        token:
+          type: string
+          description: The raw invitation token. Shown only in this response; only its digest is stored.
+
+    InvitationResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/Invitation"
+
+    AcceptInvitationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Required when the invited email has no account yet.
+        password:
+          type: string
+          description: Required when the invited email has no account yet.
+
+    UpdateMembershipRequest:
+      type: object
+      additionalProperties: false
+      required: [ role ]
+      properties:
+        role:
+          type: string
+          enum: [ owner, admin, purchasing, sales, finance, read_only ]
+
+    Member:
+      type: object
+      additionalProperties: false
+      required: [ id, user, role ]
+      properties:
+        id: { type: integer }
+        user:
+          $ref: "#/components/schemas/User"
+        role:
+          type: string
+          enum: [ owner, admin, purchasing, sales, finance, read_only ]
+
+    MemberResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/Member"

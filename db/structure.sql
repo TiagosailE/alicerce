@@ -68,6 +68,17 @@ END;
 $$;
 
 
+--
+-- Name: invitation_organization_id(character varying); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.invitation_organization_id(target_token_digest character varying) RETURNS bigint
+    LANGUAGE sql SECURITY DEFINER
+    AS $$
+  SELECT organization_id FROM identity_invitations WHERE token_digest = target_token_digest LIMIT 1;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -119,6 +130,45 @@ CREATE SEQUENCE public.audit_events_id_seq
 --
 
 ALTER SEQUENCE public.audit_events_id_seq OWNED BY public.audit_events.id;
+
+
+--
+-- Name: identity_invitations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.identity_invitations (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    invited_by_user_id bigint NOT NULL,
+    accepted_by_user_id bigint,
+    email character varying NOT NULL,
+    role character varying NOT NULL,
+    token_digest character varying NOT NULL,
+    expires_at timestamp(6) without time zone NOT NULL,
+    accepted_at timestamp(6) without time zone,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT identity_invitations_role_valid CHECK (((role)::text = ANY ((ARRAY['owner'::character varying, 'admin'::character varying, 'purchasing'::character varying, 'sales'::character varying, 'finance'::character varying, 'read_only'::character varying])::text[])))
+);
+
+
+--
+-- Name: identity_invitations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.identity_invitations_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: identity_invitations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.identity_invitations_id_seq OWNED BY public.identity_invitations.id;
 
 
 --
@@ -751,6 +801,13 @@ ALTER TABLE ONLY public.audit_events ALTER COLUMN id SET DEFAULT nextval('public
 
 
 --
+-- Name: identity_invitations id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_invitations ALTER COLUMN id SET DEFAULT nextval('public.identity_invitations_id_seq'::regclass);
+
+
+--
 -- Name: identity_memberships id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -890,6 +947,14 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 ALTER TABLE ONLY public.audit_events
     ADD CONSTRAINT audit_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: identity_invitations identity_invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_invitations
+    ADD CONSTRAINT identity_invitations_pkey PRIMARY KEY (id);
 
 
 --
@@ -1070,6 +1135,41 @@ CREATE INDEX index_audit_events_on_organization_id ON public.audit_events USING 
 --
 
 CREATE INDEX index_audit_events_on_organization_id_and_created_at ON public.audit_events USING btree (organization_id, created_at);
+
+
+--
+-- Name: index_identity_invitations_on_accepted_by_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_identity_invitations_on_accepted_by_user_id ON public.identity_invitations USING btree (accepted_by_user_id);
+
+
+--
+-- Name: index_identity_invitations_on_invited_by_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_identity_invitations_on_invited_by_user_id ON public.identity_invitations USING btree (invited_by_user_id);
+
+
+--
+-- Name: index_identity_invitations_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_identity_invitations_on_organization_id ON public.identity_invitations USING btree (organization_id);
+
+
+--
+-- Name: index_identity_invitations_on_organization_id_and_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_identity_invitations_on_organization_id_and_email ON public.identity_invitations USING btree (organization_id, email);
+
+
+--
+-- Name: index_identity_invitations_on_token_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_identity_invitations_on_token_digest ON public.identity_invitations USING btree (token_digest);
 
 
 --
@@ -1406,6 +1506,22 @@ ALTER TABLE ONLY public.solid_queue_failed_executions
 
 
 --
+-- Name: identity_invitations fk_rails_40f5359788; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_invitations
+    ADD CONSTRAINT fk_rails_40f5359788 FOREIGN KEY (accepted_by_user_id) REFERENCES public.identity_users(id);
+
+
+--
+-- Name: identity_invitations fk_rails_4b6fd2766b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_invitations
+    ADD CONSTRAINT fk_rails_4b6fd2766b FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: solid_queue_blocked_executions fk_rails_4cd34e2228; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1454,6 +1570,14 @@ ALTER TABLE ONLY public.identity_memberships
 
 
 --
+-- Name: identity_invitations fk_rails_9cea4cebf4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.identity_invitations
+    ADD CONSTRAINT fk_rails_9cea4cebf4 FOREIGN KEY (invited_by_user_id) REFERENCES public.identity_users(id);
+
+
+--
 -- Name: solid_queue_claimed_executions fk_rails_9cfe4d4944; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1499,12 +1623,26 @@ CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING ((organ
 
 
 --
+-- Name: identity_invitations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.identity_invitations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: identity_invitations identity_invitations_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY identity_invitations_tenant_isolation ON public.identity_invitations USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260919120000'),
 ('20260919110000'),
 ('20260919100000'),
 ('20260919000002'),

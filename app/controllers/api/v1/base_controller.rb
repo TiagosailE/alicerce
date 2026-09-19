@@ -6,6 +6,12 @@ module Api
 
       SESSION_COOKIE = "__Host-session"
 
+      # Maps a command Result's failure code to an HTTP status (api-contract
+      # skill): 409 for concurrency and transition conflicts, 422 for every
+      # other domain failure. Extend this when a command adds a code that
+      # belongs on the conflict side instead.
+      CONFLICT_CODES = %w[conflict_retry invalid_transition stale].freeze
+
       rescue_from ActionController::ParameterMissing, with: :render_parameter_missing
       rescue_from ActionController::TooManyRequests, with: :render_rate_limited
       rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
@@ -122,6 +128,12 @@ module Api
 
         def render_error(status:, code:, message:, details: {})
           render status: status, json: { error: { code:, message:, details:, request_id: request.request_id } }
+        end
+
+        # A command's Result.failure, rendered in the shared error envelope.
+        def render_result_error(result)
+          status = CONFLICT_CODES.include?(result.error.to_s) ? :conflict : :unprocessable_content
+          render_error(status:, code: result.error.to_s, message: result.error.to_s.humanize, details: result.details)
         end
 
         def render_parameter_missing(exception)

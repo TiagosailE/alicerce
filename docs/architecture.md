@@ -81,6 +81,8 @@ erDiagram
   identity_organizations ||--o{ identity_memberships : has
   identity_users ||--o{ identity_memberships : has
   identity_users ||--o{ identity_sessions : signs_in
+  identity_organizations ||--o{ identity_invitations : has
+  identity_users ||--o{ identity_invitations : invites
   identity_organizations ||--o{ catalog_partners : has
 
   catalog_products ||--o{ inventory_balances : "stocked as"

@@ -14,7 +14,11 @@ module DatabaseRoles
   # role only once a database exists), so the migration's own revoke and
   # grants are best-effort and this is what actually enforces them.
   APPEND_ONLY_TABLES = %w[audit_events].freeze
-  OWNER_ONLY_FUNCTIONS = { "audit_purge" => "bigint, timestamptz", "audit_redact" => "bigint, varchar, bigint" }.freeze
+  OWNER_ONLY_FUNCTIONS = {
+    "audit_purge" => "bigint, timestamptz",
+    "audit_redact" => "bigint, varchar, bigint",
+    "invitation_organization_id" => "varchar"
+  }.freeze
 
   module_function
 

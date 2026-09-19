@@ -10,5 +10,15 @@ module Identity
 
       %w[owner admin].include?(membership.role)
     end
+
+    # ADR 0008: denied to demo users regardless of role, so the public demo
+    # can be explored freely without anyone inviting people, sending email
+    # or changing authentication settings on the shared account.
+    def manage_members?(user, membership)
+      return false unless membership
+      return false if user&.demo?
+
+      %w[owner admin].include?(membership.role)
+    end
   end
 end

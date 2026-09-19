@@ -9,10 +9,10 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | Control | Status | Evidence |
 |---|---|---|
 | `organization_id` on every tenant table, scope fails closed without a current organization | in place | ADR 0003, `TenantScoped`, `Audit::Event` (the first table to use it) |
-| Postgres RLS on business tables, audit, idempotency keys and invitations, policies on `app.organization_id` (null when unset or reset), app role without `BYPASSRLS` | in place for `audit_events`, designed for the rest | ADR 0003, `docs/deploy.md`, `db/migrate/20260919110000_create_audit_events.rb` |
-| The whole test suite connects as the app role with production grants, so every spec runs under RLS; raw SQL specs prove other organizations are invisible | designed, slice 1 | ADR 0003 |
+| Postgres RLS on business tables, audit, idempotency keys and invitations, policies on `app.organization_id` (null when unset or reset), app role without `BYPASSRLS` | in place for `audit_events` and `identity_invitations`, designed for the rest | ADR 0003, `docs/deploy.md`, `db/migrate/20260919110000_create_audit_events.rb`, `db/migrate/20260919120000_create_identity_invitations.rb` |
+| The whole test suite connects as the app role with production grants, so every spec runs under RLS; raw SQL specs prove other organizations are invisible | in place | ADR 0003, `spec/rails_helper.rb`, `spec/db/audit_events_constraints_spec.rb`, `spec/db/identity_invitations_constraints_spec.rb` |
 | The tenant setting lives on a connection leased for the whole request and is reset on checkin | in place | ADR 0003, `TenantSetting`, `spec/lib/tenant_setting_spec.rb` |
-| Every `/api/v1` route in an isolation spec; a route without an entry fails the suite | in place | `RouteInventory`, `spec/requests/api/v1/route_inventory_spec.rb`; both matrices are still empty, nothing but the exempt session endpoints exists yet |
+| Every `/api/v1` route in an isolation spec; a route without an entry fails the suite | in place | `RouteInventory`, `spec/requests/api/v1/route_inventory_spec.rb` |
 | Records of another organization answer 404, never 403 | designed, slice 1 | ADR 0003, `CONTRIBUTING.md` (API contract) |
 
 ## Authentication and sessions
@@ -20,8 +20,8 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | Control | Status | Evidence |
 |---|---|---|
 | bcrypt cost 12, 12 to 72 byte passwords, common password check | designed, slice 1 | ADR 0007 |
-| Rate limits on sign-in, reset and invitation acceptance; no hard lockout | designed, slice 1 | ADR 0007 |
-| Database sessions storing only token digests; rotation on sign-in, organization switch and role or password change; revocation | designed, slice 1 | ADR 0007 |
+| Rate limits on sign-in, reset and invitation acceptance; no hard lockout | in place for sign-in and invitation acceptance, designed for reset | ADR 0007, `Api::V1::SessionsController`, `Api::V1::Invitations::AcceptancesController` |
+| Database sessions storing only token digests; rotation on sign-in, organization switch and role or password change; revocation | in place for sign-in, organization switch and role change; designed for password change | ADR 0007, `Identity::Session.revoke_others_for!`, `spec/requests/api/v1/memberships_spec.rb` |
 | Idle (30 min) and absolute (12 h) session expiry (ASVS 3.3.2) | in place | ADR 0007, `Identity::Session`, `Api::V1::BaseController#resume_session` |
 | Single-use reset token, 20 minute expiry, uniform responses | designed, slice 1 | ADR 0007 |
 | Timing-safe comparison of tokens and codes | designed, slice 1 | ADR 0007 |
@@ -31,7 +31,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 
 | Control | Status | Evidence |
 |---|---|---|
-| Pundit policies, every rule false unless allowed | in place | ADR 0008, `ApplicationPolicy`; no concrete policy exists yet, nothing to authorize besides the exempt session endpoints |
+| Pundit policies, every rule false unless allowed | in place | ADR 0008, `ApplicationPolicy`, `Audit::EventPolicy`, `Identity::InvitationPolicy`, `Identity::MembershipPolicy` |
 | `verify_authorized` and `verify_policy_scoped` on every API action | in place | ADR 0008, `Api::V1::BaseController`, `spec/requests/api/v1/authorization_enforcement_spec.rb` |
 | Role matrix spec generated per endpoint and role | in place | ADR 0008, `spec/requests/api/v1/audit_events_spec.rb` (one example per role), `spec/requests/api/v1/route_inventory_spec.rb` |
 

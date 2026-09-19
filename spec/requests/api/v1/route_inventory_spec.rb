@@ -11,14 +11,21 @@ RSpec.describe "API route inventory" do
     api/v1/sessions#destroy
     api/v1/sessions/organizations#create
     api/v1/base#route_not_found
+    api/v1/invitations/acceptances#create
   ].freeze
 
   ISOLATION_MATRIX = {
-    "api/v1/audit_events#index" => "spec/requests/api/v1/audit_events_spec.rb, another organization's events never appear"
+    "api/v1/audit_events#index" => "spec/requests/api/v1/audit_events_spec.rb, another organization's events never appear",
+    "api/v1/invitations#create" => "spec/requests/api/v1/invitations_spec.rb, the invitation is visible only to the current organization",
+    "api/v1/memberships#update" => "spec/requests/api/v1/memberships_spec.rb, another organization's membership answers not_found and is unchanged",
+    "api/v1/memberships#destroy" => "spec/requests/api/v1/memberships_spec.rb, another organization's membership answers not_found and is unchanged"
   }.freeze
 
   ROLE_MATRIX = {
-    "api/v1/audit_events#index" => "spec/requests/api/v1/audit_events_spec.rb, one example per role"
+    "api/v1/audit_events#index" => "spec/requests/api/v1/audit_events_spec.rb, one example per role",
+    "api/v1/invitations#create" => "spec/requests/api/v1/invitations_spec.rb, one example per role",
+    "api/v1/memberships#update" => "spec/requests/api/v1/memberships_spec.rb, one example per role",
+    "api/v1/memberships#destroy" => "spec/requests/api/v1/memberships_spec.rb, one example per role"
   }.freeze
 
   it "has an isolation matrix entry for every /api/v1 route, or an explicit exemption" do

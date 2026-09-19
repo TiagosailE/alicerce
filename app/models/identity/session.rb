@@ -45,5 +45,19 @@ module Identity
     def touch_if_stale(now = Time.current)
       update_column(:last_seen_at, now) if last_seen_at <= now - TOUCH_INTERVAL
     end
+
+    # ADR 0007: a password or role change deletes every other session of
+    # that user, in every organization; membership removal deletes every
+    # session of theirs in that one organization only (sessions do not
+    # re-check membership on every request, so this is what actually ends
+    # access before natural expiry, not merely the audit trail of it).
+    # except keeps the session making the request alive when the actor is
+    # acting on themselves; irrelevant, and harmless to pass, otherwise.
+    def self.revoke_others_for!(user, except: nil, organization: nil)
+      scope = where(user:)
+      scope = scope.where(organization:) if organization
+      scope = scope.where.not(id: except.id) if except
+      scope.delete_all
+    end
   end
 end
