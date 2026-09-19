@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Fast checks on staged files only. The full suite runs in bin/ci and in CI.
+set -euo pipefail
+
+staged() {
+  git diff --cached --name-only --diff-filter=ACMR | grep -E "$1" || true
+}
+
+mapfile -t ruby_files < <(staged '(\.rb|\.rake|^Gemfile|^Rakefile)$')
+if ((${#ruby_files[@]})); then
+  bin/rubocop --force-exclusion "${ruby_files[@]}"
+fi
+
+mapfile -t frontend_files < <(staged '^frontend/.+\.(ts|tsx|js|json|css|html)$' | sed 's|^frontend/||')
+if ((${#frontend_files[@]})); then
+  mapfile -t lintable < <(printf '%s\n' "${frontend_files[@]}" | grep -E '\.(ts|tsx|js)$' || true)
+  (
+    cd frontend
+    if ((${#lintable[@]})); then npx eslint "${lintable[@]}"; fi
+    npx prettier --check --ignore-unknown "${frontend_files[@]}"
+  )
+fi
+
+if command -v gitleaks >/dev/null; then
+  gitleaks git --pre-commit --staged --redact --no-banner
+else
+  echo "pre-commit: gitleaks not installed, secret scan left to CI" >&2
+fi
