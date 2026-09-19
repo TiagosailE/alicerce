@@ -5,6 +5,8 @@ module Api
       # (ADR 0008) for the same reason SessionsController does: membership in
       # the target organization is the only check that applies here.
       class OrganizationsController < BaseController
+        skip_after_action :verify_authorized
+
         before_action :require_authentication!
         before_action :verify_csrf_token!
 

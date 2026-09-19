@@ -13,6 +13,10 @@ gem "solid_queue"
 gem "strong_migrations", "~> 2.8"
 gem "tzinfo-data", platforms: %i[windows jruby]
 
+# Authorization (ADR 0008): denies by default and can verify every action
+# called it, which a hand-rolled check-in-controller approach cannot.
+gem "pundit", "~> 2.5"
+
 # ActiveSupport 8.1.3 calls JSON.parse with a positional options hash, which json 3 rejects.
 gem "json", "< 3"
 
