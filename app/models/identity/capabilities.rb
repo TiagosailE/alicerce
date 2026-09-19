@@ -20,5 +20,12 @@ module Identity
 
       %w[owner admin].include?(membership.role)
     end
+
+    # ADR 0008: denied to demo users, so the public demo's shared account
+    # cannot be locked out by a visitor changing its password. Any role
+    # may change their own password otherwise.
+    def change_own_password?(user)
+      user.present? && !user.demo?
+    end
   end
 end

@@ -92,7 +92,7 @@ RSpec.describe "Invitations API" do
     end
   end
 
-  describe "POST /api/v1/invitations/:token/acceptance" do
+  describe "POST /api/v1/invitations/acceptance" do
     # Issues the invitation as the owner, then drops the owner's session
     # cookie: whoever opens the link is a different visitor, not the same
     # browser that sent the invite.
@@ -109,8 +109,8 @@ RSpec.describe "Invitations API" do
       token = invite
       csrf_token = fetch_csrf_token
 
-      post "/api/v1/invitations/#{token}/acceptance",
-        params: { name: "Pessoa Convidada", password: },
+      post "/api/v1/invitations/acceptance",
+        params: { token:, name: "Pessoa Convidada", password: },
         as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:created)
@@ -127,7 +127,7 @@ RSpec.describe "Invitations API" do
       token = invite(email: "convidado@alicerce.example")
       csrf_token = fetch_csrf_token
 
-      post "/api/v1/invitations/#{token}/acceptance", params: {}, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+      post "/api/v1/invitations/acceptance", params: { token: }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:created)
       data = response.parsed_body.fetch("data")
@@ -137,8 +137,8 @@ RSpec.describe "Invitations API" do
     it "answers invalid_token for an unknown token" do
       csrf_token = fetch_csrf_token
 
-      post "/api/v1/invitations/not-a-real-token/acceptance",
-        params: { name: "Pessoa", password: },
+      post "/api/v1/invitations/acceptance",
+        params: { token: "not-a-real-token", name: "Pessoa", password: },
         as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:unprocessable_content)
@@ -149,11 +149,11 @@ RSpec.describe "Invitations API" do
     it "answers invalid_token for an already accepted invitation" do
       token = invite
       csrf_token = fetch_csrf_token
-      post "/api/v1/invitations/#{token}/acceptance", params: { name: "Pessoa Convidada", password: }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+      post "/api/v1/invitations/acceptance", params: { token:, name: "Pessoa Convidada", password: }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
       expect(response).to have_http_status(:created)
 
-      post "/api/v1/invitations/#{token}/acceptance",
-        params: { name: "Outra Pessoa", password: },
+      post "/api/v1/invitations/acceptance",
+        params: { token:, name: "Outra Pessoa", password: },
         as: :json, headers: { "X-CSRF-Token" => fetch_csrf_token }
 
       expect(response).to have_http_status(:unprocessable_content)
@@ -164,7 +164,7 @@ RSpec.describe "Invitations API" do
       token = invite
       csrf_token = fetch_csrf_token
 
-      post "/api/v1/invitations/#{token}/acceptance", params: { name: "" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+      post "/api/v1/invitations/acceptance", params: { token:, name: "" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:unprocessable_content)
       assert_response_schema_confirm(422)
@@ -174,7 +174,7 @@ RSpec.describe "Invitations API" do
     it "requires the CSRF token from a prior GET" do
       token = invite
 
-      post "/api/v1/invitations/#{token}/acceptance", params: { name: "Pessoa", password: }, as: :json
+      post "/api/v1/invitations/acceptance", params: { token:, name: "Pessoa", password: }, as: :json
 
       expect(response).to have_http_status(:unprocessable_content)
       expect(response.parsed_body.dig("error", "code")).to eq("invalid_csrf_token")
@@ -184,7 +184,7 @@ RSpec.describe "Invitations API" do
       token = invite
       csrf_token = fetch_csrf_token
 
-      post "/api/v1/invitations/#{token}/acceptance", params: { name: "Pessoa Convidada", password: }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+      post "/api/v1/invitations/acceptance", params: { token:, name: "Pessoa Convidada", password: }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       set_current_tenant(organization)
       new_user_id = response.parsed_body.dig("data", "user", "id")
@@ -196,10 +196,10 @@ RSpec.describe "Invitations API" do
 
       10.times do
         csrf_token = fetch_csrf_token
-        post "/api/v1/invitations/#{token}/acceptance", params: { name: "Pessoa", password: "curta" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+        post "/api/v1/invitations/acceptance", params: { token:, name: "Pessoa", password: "curta" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
       end
       csrf_token = fetch_csrf_token
-      post "/api/v1/invitations/#{token}/acceptance", params: { name: "Pessoa", password: "curta" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+      post "/api/v1/invitations/acceptance", params: { token:, name: "Pessoa", password: "curta" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:too_many_requests)
       assert_response_schema_confirm(429)

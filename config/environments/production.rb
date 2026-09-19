@@ -1,4 +1,8 @@
 require "active_support/core_ext/integer/time"
+# lib is autoloaded (config.autoload_lib in config/application.rb), but the
+# autoloader is not active yet this early in boot: a plain require here is
+# the standard way to reach a lib class from an environment file.
+require_relative "../../lib/structured_log_formatter"
 
 app_host = ENV.fetch("APP_HOST") { ENV.fetch("RENDER_EXTERNAL_HOSTNAME") }
 
@@ -13,8 +17,11 @@ Rails.application.configure do
   config.hosts = [ app_host ]
   config.host_authorization = { exclude: ->(request) { request.path == "/up" } }
 
-  config.log_tags = [ :request_id ]
-  config.logger = ActiveSupport::TaggedLogging.logger(STDOUT)
+  # One JSON object per line, tagged with the request, user and
+  # organization through Current instead of log_tags (StructuredLogFormatter):
+  # TaggedLogging only ever prepends bracketed text to the message, which
+  # cannot become real JSON fields (docs/security.md's Observability target).
+  config.logger = ActiveSupport::Logger.new(STDOUT, formatter: StructuredLogFormatter.new)
   config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "info")
   config.silence_healthcheck_path = "/up"
   config.active_support.report_deprecations = false

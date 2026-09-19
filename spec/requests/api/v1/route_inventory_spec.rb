@@ -2,8 +2,13 @@ require "rails_helper"
 
 # Fails the moment a future /api/v1 route ships with no isolation or role
 # matrix entry, per the testing-strategy skill. The session endpoints are
-# exempt (ADR 0008, see Api::V1::SessionsController); every other route
-# names the spec that proves it belongs in each matrix.
+# exempt (ADR 0008, see Api::V1::SessionsController); so are the password
+# reset endpoints, for the same reason as invitations/acceptances#create
+# (no session exists yet, the token is the only credential); so is
+# passwords#update, which only ever acts on Current.user (no id in the
+# route, no other organization's record reachable, no per-role variance
+# beyond the demo denial, see Api::V1::PasswordsController). Every other
+# route names the spec that proves it belongs in each matrix.
 RSpec.describe "API route inventory" do
   EXEMPT_ROUTES = %w[
     api/v1/sessions#show
@@ -12,6 +17,9 @@ RSpec.describe "API route inventory" do
     api/v1/sessions/organizations#create
     api/v1/base#route_not_found
     api/v1/invitations/acceptances#create
+    api/v1/password_resets#create
+    api/v1/password_resets/completions#create
+    api/v1/passwords#update
   ].freeze
 
   ISOLATION_MATRIX = {
