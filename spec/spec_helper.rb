@@ -2,6 +2,7 @@ require "simplecov"
 
 SimpleCov.start "rails" do
   enable_coverage :branch
+  track_files "{app,lib}/**/*.rb"
   skip "/spec/"
   minimum_coverage line: Float(ENV["COVERAGE_MIN_LINE"]), branch: Float(ENV["COVERAGE_MIN_BRANCH"]) if ENV["COVERAGE_MIN_LINE"]
 end

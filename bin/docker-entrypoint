@@ -1,7 +1,9 @@
 #!/bin/bash -e
 
+# Migrations run with the owner role when MIGRATION_DATABASE_URL is set; the
+# server then connects with the runtime role, which cannot change the schema.
 if [ "${@: -2:1}" == "./bin/rails" ] && [ "${@: -1:1}" == "server" ]; then
-  ./bin/rails db:prepare
+  DATABASE_URL="${MIGRATION_DATABASE_URL:-$DATABASE_URL}" ./bin/rails db:prepare
 fi
 
 exec "${@}"
