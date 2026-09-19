@@ -11,8 +11,8 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | `organization_id` on every tenant table, scope fails closed without a current organization | designed, slice 1 | ADR 0003 |
 | Postgres RLS on business tables, audit, idempotency keys and invitations, policies on `app.organization_id` (null when unset or reset), app role without `BYPASSRLS` | designed, slice 1 | ADR 0003, `docs/deploy.md` |
 | The whole test suite connects as the app role with production grants, so every spec runs under RLS; raw SQL specs prove other organizations are invisible | designed, slice 1 | ADR 0003 |
-| The tenant setting lives on a connection leased for the whole request and is reset on checkin | designed, slice 1 | ADR 0003 |
-| Every `/api/v1` route in an isolation spec; a route without an entry fails the suite | designed, slice 1 | `CONTRIBUTING.md` (Tests) |
+| The tenant setting lives on a connection leased for the whole request and is reset on checkin | in place | ADR 0003, `TenantSetting`, `spec/lib/tenant_setting_spec.rb` |
+| Every `/api/v1` route in an isolation spec; a route without an entry fails the suite | in place | `RouteInventory`, `spec/requests/api/v1/route_inventory_spec.rb`; both matrices are still empty, nothing but the exempt session endpoints exists yet |
 | Records of another organization answer 404, never 403 | designed, slice 1 | ADR 0003, `CONTRIBUTING.md` (API contract) |
 
 ## Authentication and sessions
@@ -31,8 +31,8 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 
 | Control | Status | Evidence |
 |---|---|---|
-| Pundit policies, every rule false unless allowed | designed, slice 1 | ADR 0008 |
-| `verify_authorized` and `verify_policy_scoped` on every API action | designed, slice 1 | ADR 0008 |
+| Pundit policies, every rule false unless allowed | in place | ADR 0008, `ApplicationPolicy`; no concrete policy exists yet, nothing to authorize besides the exempt session endpoints |
+| `verify_authorized` and `verify_policy_scoped` on every API action | in place | ADR 0008, `Api::V1::BaseController`, `spec/requests/api/v1/authorization_enforcement_spec.rb` |
 | Role matrix spec generated per endpoint and role | designed, slice 1 | ADR 0008 |
 
 ## Input and output
