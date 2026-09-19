@@ -5,6 +5,8 @@ CI.run do
   step "Style: TypeScript", "npm --prefix frontend run lint"
   step "Style: Formatting", "npm --prefix frontend run format:check"
   step "Types: TypeScript", "npm --prefix frontend run typecheck"
+  step "Contract: OpenAPI types match docs/openapi/openapi.yaml",
+    "npm --prefix frontend run generate:api && git diff --exit-code -- frontend/src/api/schema.d.ts"
 
   step "Security: Gem audit", "bin/bundler-audit check --update"
   step "Security: npm audit", "npm --prefix frontend audit --audit-level=high"
