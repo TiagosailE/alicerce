@@ -2,6 +2,16 @@
 # check=error=true
 
 ARG RUBY_VERSION=4.0.7
+ARG NODE_VERSION=24.21.0
+
+FROM docker.io/library/node:$NODE_VERSION-slim AS frontend
+
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM docker.io/library/ruby:$RUBY_VERSION-slim AS base
 
 WORKDIR /rails
@@ -29,6 +39,7 @@ RUN bundle install && \
     bundle exec bootsnap precompile -j 1 --gemfile
 
 COPY . .
+COPY --from=frontend /public/spa /rails/public/spa
 RUN bundle exec bootsnap precompile -j 1 app/ lib/
 
 FROM base
