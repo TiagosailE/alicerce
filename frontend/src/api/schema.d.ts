@@ -43,6 +43,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/audit_events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's audit trail
+         * @description Owner and admin only (ADR 0008).
+         */
+        get: operations["listAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -95,6 +115,27 @@ export interface components {
         ErrorResponseBody: {
             error: components["schemas"]["Error"];
         };
+        Meta: {
+            page: number;
+            per_page: number;
+            total: number;
+        };
+        AuditEvent: {
+            id: number;
+            action: string;
+            subject_type: string;
+            subject_id: number;
+            field_changes: {
+                [key: string]: unknown;
+            };
+            actor: components["schemas"]["User"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        AuditEventListResponseBody: {
+            data: components["schemas"]["AuditEvent"][];
+            meta: components["schemas"]["Meta"];
+        };
     };
     responses: {
         /** @description The current session, if any, and a CSRF token. */
@@ -113,6 +154,15 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ErrorResponseBody"];
+            };
+        };
+        /** @description A page of the audit trail. */
+        AuditEventListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AuditEventListResponseBody"];
             };
         };
     };
@@ -197,6 +247,23 @@ export interface operations {
             401: components["responses"]["Error"];
             404: components["responses"]["Error"];
             422: components["responses"]["Error"];
+        };
+    };
+    listAuditEvents: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["AuditEventListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
         };
     };
 }
