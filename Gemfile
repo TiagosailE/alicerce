@@ -3,6 +3,7 @@ source "https://rubygems.org"
 ruby file: ".ruby-version"
 
 gem "rails", "~> 8.1.3"
+gem "bcrypt", "~> 3.1.20"
 gem "pg", "~> 1.6"
 gem "puma", ">= 7.0"
 gem "bootsnap", require: false

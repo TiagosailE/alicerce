@@ -21,6 +21,7 @@ module Alicerce
       "permissions-policy" => "camera=(), microphone=(), geolocation=(), usb=(), payment=(), fullscreen=(self)"
     )
     config.time_zone = "Brasilia"
+    config.active_record.schema_format = :sql
     config.x.spa_index = Rails.root.join("frontend/dist/index.html")
   end
 end
