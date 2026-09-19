@@ -1,2 +1,24 @@
 #!/usr/bin/env ruby
-exec "./bin/rails", "server", *ARGV
+# Runs Rails (with Solid Queue inside Puma) and the Vite dev server, and stops
+# both as soon as either one exits, so a dead watcher never leaves a half-running app.
+Dir.chdir(File.expand_path("..", __dir__))
+
+processes = {
+  "rails" => spawn({ "SOLID_QUEUE_IN_PUMA" => "1" }, "bin/rails", "server", "-p", "3000", pgroup: true),
+  "vite" => spawn("npm", "--prefix", "frontend", "run", "dev", pgroup: true)
+}
+
+def stop(pids)
+  pids.each do |pid|
+    Process.kill("TERM", -pid)
+  rescue Errno::ESRCH
+    nil
+  end
+end
+
+%w[INT TERM].each { |signal| trap(signal) { stop(processes.values) } }
+
+pid, status = Process.wait2
+puts "#{processes.key(pid)} exited with status #{status.exitstatus}; stopping the rest"
+stop(processes.values - [ pid ])
+Process.waitall
