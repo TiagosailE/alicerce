@@ -1,45 +1,50 @@
-# ADR 0007: Password authentication with database sessions in an HttpOnly cookie
+# ADR 0007: Password authentication with database sessions in a __Host- cookie
 
 - Status: accepted
 - Date: 2026-09-19
 
 ## Context
 
-The SPA and the API share an origin (ADR 0001), so the browser can hold the session in a cookie the JavaScript cannot read. The target is OWASP ASVS level 2 on authentication and session management: modern password hashing, throttling, session rotation and revocation, single-use expiring reset tokens, timing-safe comparisons and optional multi-factor authentication. Rails 8.1 ships an authentication generator (database sessions, `has_secure_password`, `generates_token_for` for resets, `rate_limit`) but it stores the session record id in a signed cookie and has no absolute or idle expiry.
+The SPA and the API share an origin (ADR 0001), so the session can live in a cookie the JavaScript cannot read. The target is OWASP ASVS 4.0.3 level 2 for authentication and session management. Rails 8.1 ships an authentication generator (database sessions, `has_secure_password`, `generates_token_for` for resets, `rate_limit`) that stores the session record id in a signed cookie and has no idle or absolute expiry. API mode also drops the cookie and session middleware that request forgery protection needs.
 
 ## Options
 
 | | Devise | JWT in browser storage | Rails 8 generator as is | Generator, hardened |
 |---|---|---|---|---|
 | Revocation | yes | no, until expiry | yes | yes |
-| Token readable by an XSS | no (cookie) | yes | no | no |
-| Stolen database rows reveal usable sessions | n/a (cookie store) | n/a | ids only, cookie is signed | no, only token digests are stored |
+| Token readable by an XSS | no | yes | no | no |
+| A database dump yields usable sessions | n/a | n/a | no, but ids are guessable if the signing key leaks | no, only token digests are stored |
 | Idle and absolute timeouts | via modules | by expiry only | no | yes |
 | Code the author must defend | large, implicit | custom | small | small, explicit |
 
 ## Decision
 
-The generator's shape, hardened:
+**Passwords.** `has_secure_password` with bcrypt at cost 12. Rails 8.1 supports only bcrypt there; a custom argon2 hasher adds more risk than it removes. Passwords are 12 to 72 bytes (bcrypt's limit): at least 64 characters of ASCII, fewer when many characters are accented; this deviation from ASVS 2.1.2 is recorded in `docs/security.md`. New passwords are checked against a list of common passwords shipped with the app.
 
-- Passwords: `has_secure_password` (bcrypt, cost 12; argon2 is not supported by Rails 8.1 and a custom hasher is not worth the risk). Minimum 12 characters, maximum 72 bytes (bcrypt limit), checked against a list of common passwords.
-- Sessions: a `sessions` row per sign-in with the SHA-256 digest of a 32-byte random token, `user_id`, `organization_id`, `ip`, `user_agent`, `created_at`, `last_seen_at`. The raw token lives only in an encrypted cookie `__Host-session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`. Lookups compare digests, so a database leak does not yield usable sessions.
-- Expiry: idle timeout 8 hours (`last_seen_at` refreshed at most once a minute), absolute lifetime 7 days.
-- Rotation and revocation: a new session on every sign-in and on switching organization; changing the password or role destroys all other sessions of that user; users list and revoke their sessions.
-- CSRF: Rails request forgery protection on every state-changing request, with the token read from `GET /api/v1/session` and sent in `X-CSRF-Token`. `SameSite=Lax` is the second layer, not the only one.
-- Throttling: `rate_limit` on sign-in (per IP and per email), password reset requests and invitation acceptance, with a cache store that survives restarts (Solid Cache). No hard account lockout, which would let anyone lock a known user out; after repeated failures on one account the response is delayed and a notice is emailed to the owner.
-- Uniform responses: sign-in failures and reset requests answer the same way whether or not the email exists.
-- Password reset: `generates_token_for` with a 20 minute expiry, bound to the password salt, so the token stops working after one use.
-- Two-factor: optional TOTP (RFC 6238) with recovery codes stored as digests, in the hardening slice. Its secret is encrypted with Active Record encryption.
-- Comparisons of tokens and codes use `ActiveSupport::SecurityUtils.secure_compare`.
+**Sessions.** One `identity_sessions` row per sign-in: `user_id`, `organization_id`, the SHA-256 digest of a 32-byte random token, `created_at`, `last_seen_at`, and `ip` and `user_agent` for the user's own session list. The raw token lives only in the cookie `__Host-session` (`Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/`); it is random and verified by digest, so it is not additionally signed or encrypted.
+- Expiry (ASVS 3.3.2): idle 30 minutes (`last_seen_at` refreshed at most once a minute), absolute 12 hours.
+- Rotation: a new session on sign-in and on switching organization; the old row is deleted.
+- Revocation: changing the password or role deletes every other session of that user in every organization; users can list and end their own sessions. Demo users see no session list, and their sessions store no IP or user agent.
+
+**CSRF.** The cookie and cookie-store session middleware are added back in API mode. The Rails session holds only the CSRF token, in its own cookie `__Host-csrf`, and is reset on sign-in and sign-out, which also covers login CSRF. `GET /api/v1/session` returns the token (and the signed-in user, when there is one) as a JSON object; the SPA sends it in `X-CSRF-Token` on every state-changing request.
+
+**Throttling without lockout.** `rate_limit` per IP (10 sign-in attempts per 3 minutes) and per IP and email pair (5 per 3 minutes) on sign-in, and per IP on password reset requests and invitation acceptance. There is no limit per email alone, so nobody can lock another user out, including the shared demo account. Responses are not delayed. Distributed guessing against one account remains possible and is recorded as an accepted risk, mitigated by the password policy and optional two-factor authentication.
+
+**Uniform responses.** Sign-in failures and reset requests answer the same way and do the same work (a bcrypt comparison against a dummy digest when the email is unknown), whether or not the account exists.
+
+**Password reset.** `generates_token_for` with a 20 minute expiry, bound to the password salt, so a token stops working after one use or any password change.
+
+**Two-factor (hardening slice).** Optional TOTP (RFC 6238): the secret encrypted with Active Record encryption, the last accepted time step stored to reject replays, attempts rate limited like sign-in, recovery codes stored as digests.
+
+**Comparisons** of tokens and codes use `ActiveSupport::SecurityUtils.secure_compare`. Failed sign-ins are logged as structured events with a hashed email; successful sign-ins and password changes are audit events.
 
 ## Consequences
 
-- No token is ever reachable from JavaScript; an XSS can still act inside the page, which is why the CSP stays strict.
-- Session checks cost one indexed lookup per request.
-- Rate limits depend on Solid Cache; if the cache is cleared, limits reset, which is accepted.
-- The demo user shares one account among visitors; its role cannot change authentication settings, invite users or send email (see `docs/scope.md`).
+- No token is reachable from JavaScript; an XSS can still act inside the page, which is why the CSP stays strict.
+- A 30 minute idle timeout interrupts long pauses; the SPA warns before it expires.
+- Rate limit counters live in Solid Cache and reset if it is cleared, which is accepted.
 
 ## What would make me change my mind
 
-- A requirement for single sign-on with customers' identity providers: OIDC through a maintained library, in a new ADR.
-- Rails adding argon2id support to `has_secure_password`: migrate hashes on next sign-in.
+- Single sign-on with customers' identity providers: OIDC through a maintained library, in a new ADR.
+- Rails adding argon2id to `has_secure_password`: migrate hashes on next sign-in and lift the 72 byte limit.
