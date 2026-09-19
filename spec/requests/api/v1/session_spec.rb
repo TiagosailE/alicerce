@@ -86,6 +86,17 @@ RSpec.describe "Session API" do
       expect(Identity::Session.count).to eq(1)
     end
 
+    it "records an audit event for the sign-in" do
+      sign_in(email: user.email, password:)
+
+      set_current_tenant(organization)
+      event = Audit::Event.sole
+      expect(event.action).to eq("signed_in")
+      expect(event.actor).to eq(user)
+      expect(event.subject_type).to eq("Identity::User")
+      expect(event.subject_id).to eq(user.id)
+    end
+
     it "signs in a demo user without recording their IP or user agent" do
       demo_user = create(:user, demo: true, password:)
       create(:membership, user: demo_user, organization:, role: "owner")

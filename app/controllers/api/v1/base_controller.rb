@@ -11,6 +11,7 @@ module Api
       rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
       rescue_from Pundit::NotAuthorizedError, with: :render_forbidden
 
+      before_action :set_audit_context
       before_action :resume_session
       around_action :with_tenant_setting
 
@@ -34,6 +35,11 @@ module Api
       private
         # Pundit calls this to get the actor authorize and policy_scope see.
         def pundit_user = Current.user
+
+        def set_audit_context
+          Current.request_id = request.request_id
+          Current.ip_prefix = Audit.ip_prefix(request.remote_ip)
+        end
 
         def resume_session
           token = cookies[SESSION_COOKIE]
@@ -81,7 +87,11 @@ module Api
 
         # Starts a new browser session for user/organization, deleting
         # whichever session the request cookie carried (ADR 0007: sign-in and
-        # organization switch both rotate the session row).
+        # organization switch both rotate the session row). Applies the
+        # tenant setting itself: with_tenant_setting already ran its
+        # pre-action check by the time sign-in establishes Current.organization,
+        # so nothing else would apply it before an Audit.record call in the
+        # same action needs it.
         def start_browser_session!(user:, organization:)
           Current.session&.destroy!
 
@@ -90,6 +100,7 @@ module Api
           Current.session = record
           Current.user = user
           Current.organization = organization
+          TenantSetting.apply!(organization.id)
           record
         end
 
