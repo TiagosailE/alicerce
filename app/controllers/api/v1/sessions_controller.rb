@@ -27,6 +27,7 @@ module Api
 
         reset_session
         start_browser_session!(user:, organization:)
+        Audit.record("signed_in", user, actor: user)
         render json: { data: session_payload(user:, organization:) }, status: :created
       end
 
