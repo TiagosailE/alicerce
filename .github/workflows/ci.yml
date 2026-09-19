@@ -74,6 +74,7 @@ jobs:
           image-ref: alicerce:ci
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: "1"
       - name: Start the image with its default command, as Render runs it
         run: |
@@ -94,6 +95,9 @@ jobs:
         run: |
           sleep 10
           docker exec app bin/rails runner 'kinds = SolidQueue::Process.pluck(:kind); puts kinds.inspect; exit((%w[Worker Dispatcher Scheduler] - kinds).empty?)'
+      - name: Check that the loaded json is the locked one, not the base image default
+        run: |
+          docker exec app bin/rails runner 'locked = Bundler.locked_gems.specs.find { |s| s.name == "json" }.version.to_s; puts "loaded #{JSON::VERSION}, locked #{locked}"; exit(JSON::VERSION == locked)'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version

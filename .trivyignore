@@ -1,0 +1,4 @@
+# Ruby 4.0.7 ships json 2.18.0 as a default gem in the base image. It stays on
+# disk but is never loaded: Bundler activates the json locked in Gemfile.lock,
+# and the Docker job fails if the loaded version differs from the locked one.
+CVE-2026-33210
