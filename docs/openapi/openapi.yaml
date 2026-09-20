@@ -96,6 +96,24 @@ paths:
           $ref: "#/components/responses/Error"
 
   /invitations:
+    get:
+      operationId: listInvitations
+      summary: List the current organization's pending invitations
+      description: Owner and admin only; denied to demo users regardless of role (ADR 0008).
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          $ref: "#/components/responses/PendingInvitationListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
     post:
       operationId: createInvitation
       summary: Invite someone to join the organization
@@ -141,6 +159,49 @@ paths:
         "422":
           $ref: "#/components/responses/Error"
         "429":
+          $ref: "#/components/responses/Error"
+
+  /invitations/{id}:
+    delete:
+      operationId: destroyInvitation
+      summary: Cancel a pending invitation
+      description: Owner and admin only; denied to demo users regardless of role (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: The invitation was cancelled.
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /memberships:
+    get:
+      operationId: listMemberships
+      summary: List the current organization's members
+      description: Owner and admin only; denied to demo users regardless of role (ADR 0008).
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          $ref: "#/components/responses/MemberListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
           $ref: "#/components/responses/Error"
 
   /memberships/{id}:
@@ -313,6 +374,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/MemberResponseBody"
+    MemberListResponse:
+      description: A page of the current organization's members.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MemberListResponseBody"
+    PendingInvitationListResponse:
+      description: A page of the current organization's pending invitations.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PendingInvitationListResponseBody"
 
   schemas:
     User:
@@ -522,6 +595,42 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Member"
+
+    MemberListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Member" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    PendingInvitation:
+      type: object
+      additionalProperties: false
+      required: [ id, email, role, invited_by, expires_at ]
+      properties:
+        id: { type: integer }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [ owner, admin, purchasing, sales, finance, read_only ]
+        invited_by:
+          $ref: "#/components/schemas/User"
+        expires_at: { type: string, format: date-time }
+
+    PendingInvitationListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PendingInvitation" }
+        meta:
+          $ref: "#/components/schemas/Meta"
 
     CreatePasswordResetRequest:
       type: object

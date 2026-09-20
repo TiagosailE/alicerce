@@ -105,6 +105,154 @@ RSpec.describe "Invitations API" do
     end
   end
 
+  describe "GET /api/v1/invitations" do
+    it "requires an existing session" do
+      get "/api/v1/invitations"
+
+      expect(response).to have_http_status(:unauthorized)
+      assert_response_schema_confirm(401)
+    end
+
+    # Role matrix (ADR 0008): only owner and admin manage members.
+    { "owner" => :ok, "admin" => :ok, "purchasing" => :forbidden, "sales" => :forbidden,
+      "finance" => :forbidden, "read_only" => :forbidden }.each do |role, expected_status|
+      it "answers #{expected_status} for the #{role} role" do
+        user = create_membership(organization, role:)
+        sign_in_via_api(email: user.email, password:)
+
+        get "/api/v1/invitations"
+
+        expect(response).to have_http_status(expected_status)
+        assert_response_schema_confirm(response.status)
+        expect(response.parsed_body.dig("error", "code")).to eq("forbidden") if expected_status == :forbidden
+      end
+    end
+
+    it "denies a demo owner (ADR 0008)" do
+      demo_owner = create_membership(organization, role: "owner", demo: true)
+      sign_in_via_api(email: demo_owner.email, password:)
+
+      get "/api/v1/invitations"
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "lists only the current organization's pending invitations, newest first" do
+      owner = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      older = create(:invitation, organization:, invited_by: owner, created_at: 2.days.ago)
+      newer = create(:invitation, organization:, invited_by: owner, created_at: 1.day.ago)
+      create(:invitation, organization:, invited_by: owner, accepted_at: 1.hour.ago, accepted_by: create(:user))
+      create(:invitation, organization:, invited_by: owner, expires_at: 1.minute.ago)
+      set_current_tenant(other_organization)
+      create(:invitation, organization: other_organization, invited_by: create(:user))
+      sign_in_via_api(email: owner.email, password:)
+
+      get "/api/v1/invitations"
+
+      expect(response).to have_http_status(:ok)
+      assert_response_schema_confirm(200)
+      body = response.parsed_body
+      ids = body["data"].map { |invitation| invitation["id"] }
+      expect(ids).to eq([ newer.id, older.id ])
+      expect(body["meta"]).to eq("page" => 1, "per_page" => 25, "total" => 2)
+      expect(body["data"].first.dig("invited_by", "id")).to eq(owner.id)
+    end
+  end
+
+  describe "DELETE /api/v1/invitations/:id" do
+    it "requires an existing session" do
+      owner = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      invitation = create(:invitation, organization:, invited_by: owner)
+
+      delete "/api/v1/invitations/#{invitation.id}"
+
+      expect(response).to have_http_status(:unauthorized)
+      assert_response_schema_confirm(401)
+    end
+
+    it "requires the CSRF token from a prior GET" do
+      owner = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      invitation = create(:invitation, organization:, invited_by: owner)
+      sign_in_via_api(email: owner.email, password:)
+
+      delete "/api/v1/invitations/#{invitation.id}"
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_csrf_token")
+    end
+
+    # Role matrix (ADR 0008): only owner and admin manage members.
+    { "owner" => :no_content, "admin" => :no_content, "purchasing" => :forbidden, "sales" => :forbidden,
+      "finance" => :forbidden, "read_only" => :forbidden }.each do |role, expected_status|
+      it "answers #{expected_status} for the #{role} role" do
+        actor = create_membership(organization, role:)
+        set_current_tenant(organization)
+        invitation = create(:invitation, organization:, invited_by: actor)
+        csrf_token = sign_in_and_csrf(actor)
+
+        delete "/api/v1/invitations/#{invitation.id}", headers: { "X-CSRF-Token" => csrf_token }
+
+        expect(response).to have_http_status(expected_status)
+        expect(response.parsed_body.dig("error", "code")).to eq("forbidden") if expected_status == :forbidden
+      end
+    end
+
+    it "denies a demo owner (ADR 0008)" do
+      demo_owner = create_membership(organization, role: "owner", demo: true)
+      set_current_tenant(organization)
+      invitation = create(:invitation, organization:, invited_by: demo_owner)
+      csrf_token = sign_in_and_csrf(demo_owner)
+
+      delete "/api/v1/invitations/#{invitation.id}", headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "cancels the invitation" do
+      owner = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      invitation = create(:invitation, organization:, invited_by: owner)
+      csrf_token = sign_in_and_csrf(owner)
+
+      delete "/api/v1/invitations/#{invitation.id}", headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:no_content)
+      assert_response_schema_confirm(204)
+      set_current_tenant(organization)
+      expect(Identity::Invitation.exists?(invitation.id)).to be(false)
+    end
+
+    it "answers not_found for another organization's invitation, leaving it unchanged" do
+      owner = create_membership(organization, role: "owner")
+      set_current_tenant(other_organization)
+      other_invitation = create(:invitation, organization: other_organization, invited_by: create(:user))
+      csrf_token = sign_in_and_csrf(owner)
+
+      delete "/api/v1/invitations/#{other_invitation.id}", headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:not_found)
+      assert_response_schema_confirm(404)
+      set_current_tenant(other_organization)
+      expect(Identity::Invitation.exists?(other_invitation.id)).to be(true)
+    end
+
+    it "answers already_accepted for an invitation that was just accepted" do
+      owner = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      invitation = create(:invitation, organization:, invited_by: owner, accepted_at: 1.hour.ago, accepted_by: create(:user))
+      csrf_token = sign_in_and_csrf(owner)
+
+      delete "/api/v1/invitations/#{invitation.id}", headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "code")).to eq("already_accepted")
+    end
+  end
+
   describe "POST /api/v1/invitations/acceptance" do
     # Issues the invitation as the owner, then drops the owner's session
     # cookie: whoever opens the link is a different visitor, not the same

@@ -25,6 +25,9 @@ RSpec.describe "API route inventory" do
   ISOLATION_MATRIX = {
     "api/v1/audit_events#index" => "spec/requests/api/v1/audit_events_spec.rb, another organization's events never appear",
     "api/v1/invitations#create" => "spec/requests/api/v1/invitations_spec.rb, the invitation is visible only to the current organization",
+    "api/v1/invitations#index" => "spec/requests/api/v1/invitations_spec.rb, another organization's pending invitation never appears",
+    "api/v1/invitations#destroy" => "spec/requests/api/v1/invitations_spec.rb, another organization's invitation answers not_found and is unchanged",
+    "api/v1/memberships#index" => "spec/requests/api/v1/memberships_spec.rb, another organization's member never appears",
     "api/v1/memberships#update" => "spec/requests/api/v1/memberships_spec.rb, another organization's membership answers not_found and is unchanged",
     "api/v1/memberships#destroy" => "spec/requests/api/v1/memberships_spec.rb, another organization's membership answers not_found and is unchanged"
   }.freeze
@@ -32,6 +35,9 @@ RSpec.describe "API route inventory" do
   ROLE_MATRIX = {
     "api/v1/audit_events#index" => "spec/requests/api/v1/audit_events_spec.rb, one example per role",
     "api/v1/invitations#create" => "spec/requests/api/v1/invitations_spec.rb, one example per role",
+    "api/v1/invitations#index" => "spec/requests/api/v1/invitations_spec.rb, one example per role",
+    "api/v1/invitations#destroy" => "spec/requests/api/v1/invitations_spec.rb, one example per role",
+    "api/v1/memberships#index" => "spec/requests/api/v1/memberships_spec.rb, one example per role",
     "api/v1/memberships#update" => "spec/requests/api/v1/memberships_spec.rb, one example per role",
     "api/v1/memberships#destroy" => "spec/requests/api/v1/memberships_spec.rb, one example per role"
   }.freeze

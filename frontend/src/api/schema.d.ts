@@ -70,7 +70,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List the current organization's pending invitations
+         * @description Owner and admin only; denied to demo users regardless of role (ADR 0008).
+         */
+        get: operations["listInvitations"];
         put?: never;
         /**
          * Invite someone to join the organization
@@ -97,6 +101,46 @@ export interface paths {
          * @description No session required (ADR 0003): holding the token is the only credential this action recognizes. The token travels in the body, never the URL, so it cannot leak through request path logging. Signs the accepting user in on success, the same as POST /session.
          */
         post: operations["acceptInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/invitations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a pending invitation
+         * @description Owner and admin only; denied to demo users regardless of role (ADR 0008).
+         */
+        delete: operations["destroyInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/memberships": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's members
+         * @description Owner and admin only; denied to demo users regardless of role (ADR 0008).
+         */
+        get: operations["listMemberships"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -300,6 +344,24 @@ export interface components {
         MemberResponseBody: {
             data: components["schemas"]["Member"];
         };
+        MemberListResponseBody: {
+            data: components["schemas"]["Member"][];
+            meta: components["schemas"]["Meta"];
+        };
+        PendingInvitation: {
+            id: number;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "owner" | "admin" | "purchasing" | "sales" | "finance" | "read_only";
+            invited_by: components["schemas"]["User"];
+            /** Format: date-time */
+            expires_at: string;
+        };
+        PendingInvitationListResponseBody: {
+            data: components["schemas"]["PendingInvitation"][];
+            meta: components["schemas"]["Meta"];
+        };
         CreatePasswordResetRequest: {
             /** Format: email */
             email: string;
@@ -357,6 +419,24 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["MemberResponseBody"];
+            };
+        };
+        /** @description A page of the current organization's members. */
+        MemberListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MemberListResponseBody"];
+            };
+        };
+        /** @description A page of the current organization's pending invitations. */
+        PendingInvitationListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PendingInvitationListResponseBody"];
             };
         };
     };
@@ -460,6 +540,23 @@ export interface operations {
             403: components["responses"]["Error"];
         };
     };
+    listInvitations: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PendingInvitationListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
     createInvitation: {
         parameters: {
             query?: never;
@@ -501,6 +598,50 @@ export interface operations {
             201: components["responses"]["SessionResponse"];
             422: components["responses"]["Error"];
             429: components["responses"]["Error"];
+        };
+    };
+    destroyInvitation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invitation was cancelled. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    listMemberships: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["MemberListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
         };
     };
     destroyMembership: {
