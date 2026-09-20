@@ -8,7 +8,8 @@ module Identity
   #
   # Error codes: :invalid_token (unknown, expired or already accepted, not
   # distinguished so a guess cannot tell which), :validation_failed (a new
-  # account needs name and password), :already_member.
+  # account needs name and password), :already_member, :conflict_retry
+  # (lock wait timed out or deadlocked, safe to retry).
   class AcceptInvitation
     def self.call(...) = new(...).call
 
@@ -22,6 +23,7 @@ module Identity
       return Result.failure(:invalid_token) unless @invitation
 
       ApplicationRecord.transaction do
+        ApplicationRecord.lease_connection.execute("SET LOCAL lock_timeout = '3s'")
         # Locked and rechecked here, not trusted from the @invitation the
         # caller looked up: two concurrent acceptances of the same token
         # (a double submit, or a client retry) would otherwise both read
@@ -30,7 +32,10 @@ module Identity
         # find_by, not find: a RevokeInvitation racing this same token can
         # destroy the row between the caller's lookup and this lock, which
         # must fail the same as any other invalid token, not raise
-        # RecordNotFound out of a command.
+        # RecordNotFound out of a command. Same ADR 0004 lock_timeout and
+        # conflict_retry discipline as every other pessimistic lock in this
+        # codebase, since either side of that race can hang against the
+        # other locking this same row.
         invitation = Identity::Invitation.lock.find_by(id: @invitation.id)
         return Result.failure(:invalid_token) if invitation.nil? || invitation.accepted? || invitation.expired?
 
@@ -45,6 +50,8 @@ module Identity
 
         Result.success(user:, membership:)
       end
+    rescue ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked
+      Result.failure(:conflict_retry)
     end
 
     private
