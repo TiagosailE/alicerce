@@ -1,4 +1,4 @@
-import { type SubmitEvent, useId, useState } from "react";
+import { type SubmitEvent, useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import { BrandMark } from "../../components/ui/BrandMark";
 import { Button } from "../../components/ui/Button";
@@ -30,9 +30,19 @@ export function SignInScreen() {
   const emailId = useId();
   const passwordId = useId();
   const errorId = useId();
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   const pending = signIn.isPending;
   const organizations = memberships ?? organizationsFromError(signIn.error);
+  const showingOrganizationPicker = organizations !== null;
+
+  // Moves focus to this step's own heading whenever the screen switches
+  // between the credentials form and the organization picker: neither is a
+  // full navigation, so nothing else would tell a keyboard or screen reader
+  // user that the content under their cursor just changed.
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [showingOrganizationPicker]);
 
   function submitCredentials(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,6 +71,7 @@ export function SignInScreen() {
 
         {organizations ? (
           <OrganizationPicker
+            headingRef={headingRef}
             organizations={organizations}
             pending={pending}
             error={
@@ -76,7 +87,13 @@ export function SignInScreen() {
           />
         ) : (
           <form onSubmit={submitCredentials} noValidate>
-            <h1 className="font-display mb-4 text-xl text-text">{t("signIn.title")}</h1>
+            <h1
+              ref={headingRef}
+              tabIndex={-1}
+              className="font-display mb-4 text-xl text-text outline-none"
+            >
+              {t("signIn.title")}
+            </h1>
 
             <label htmlFor={emailId} className="mb-1 block text-sm font-medium text-text">
               {t("signIn.emailLabel")}
@@ -90,6 +107,7 @@ export function SignInScreen() {
               onChange={(event) => {
                 setEmail(event.target.value);
               }}
+              aria-describedby={signIn.isError ? errorId : undefined}
               className="mb-3 h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-focus"
             />
 
@@ -127,12 +145,14 @@ export function SignInScreen() {
 }
 
 function OrganizationPicker({
+  headingRef,
   organizations,
   pending,
   error,
   onChoose,
   onBack,
 }: {
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
   organizations: Membership[];
   pending: boolean;
   error: string | null;
@@ -141,7 +161,13 @@ function OrganizationPicker({
 }) {
   return (
     <div>
-      <h1 className="font-display mb-1 text-xl text-text">{t("signIn.chooseOrganizationTitle")}</h1>
+      <h1
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-display mb-1 text-xl text-text outline-none"
+      >
+        {t("signIn.chooseOrganizationTitle")}
+      </h1>
       <p className="mb-4 text-sm text-text-muted">{t("signIn.chooseOrganizationHint")}</p>
 
       {error && (
@@ -159,7 +185,7 @@ function OrganizationPicker({
               onClick={() => {
                 onChoose(membership.organization.id);
               }}
-              className="flex w-full items-center justify-between rounded-md border border-border-subtle px-3 py-2 text-left text-sm hover:bg-row-hover disabled:cursor-not-allowed disabled:opacity-45"
+              className="flex w-full items-center justify-between rounded-md border border-border-strong px-3 py-2 text-left text-sm hover:bg-row-hover active:bg-row-selected disabled:cursor-not-allowed disabled:opacity-45"
             >
               <span className="font-medium text-text">{membership.organization.name}</span>
               <span className="text-text-muted">{t(`role.${membership.role}`)}</span>

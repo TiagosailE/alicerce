@@ -15,7 +15,13 @@ class SpaController < ActionController::API
   # Sets data-theme on <html> before first paint (design-system skill): a
   # plain script tag, not inline, since the CSP has no unsafe-inline.
   def theme_init
-    response.headers["Cache-Control"] = "no-cache"
-    render plain: Rails.configuration.x.theme_init_script.read, content_type: "application/javascript"
+    script = Rails.configuration.x.theme_init_script
+
+    if script.file?
+      response.headers["Cache-Control"] = "no-cache"
+      render plain: script.read, content_type: "application/javascript"
+    else
+      head :not_found
+    end
   end
 end

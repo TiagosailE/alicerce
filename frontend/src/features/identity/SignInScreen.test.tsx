@@ -39,14 +39,21 @@ describe("SignInScreen", () => {
     vi.unstubAllGlobals();
   });
 
-  it("shows a translated error for invalid credentials", async () => {
+  it("shows a translated error for invalid credentials, described by both fields", async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse(errorEnvelope("unauthenticated", "nope"), 401));
     const user = userEvent.setup();
     renderSignIn();
 
     await fillCredentials(user);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("E-mail ou senha inválidos.");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("E-mail ou senha inválidos.");
+    expect(screen.getByLabelText("E-mail")).toHaveAccessibleDescription(
+      "E-mail ou senha inválidos.",
+    );
+    expect(screen.getByLabelText("Senha")).toHaveAccessibleDescription(
+      "E-mail ou senha inválidos.",
+    );
   });
 
   it("shows a translated error when rate limited", async () => {
@@ -91,6 +98,7 @@ describe("SignInScreen", () => {
 
     expect(await screen.findByText("Escolha a organização")).toBeInTheDocument();
     expect(screen.getByText("Ferragens Serra Dourada")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Escolha a organização" })).toHaveFocus();
 
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse(
@@ -137,5 +145,6 @@ describe("SignInScreen", () => {
     await user.click(screen.getByRole("button", { name: "Voltar" }));
 
     expect(screen.getByRole("heading", { name: "Entrar" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Entrar" })).toHaveFocus();
   });
 });

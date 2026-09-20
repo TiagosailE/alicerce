@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/shell/AppShell";
+import { Spinner } from "./components/ui/Spinner";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { useSession } from "./features/identity/api";
 import { SignInScreen } from "./features/identity/SignInScreen";
@@ -11,7 +12,10 @@ export function App() {
   if (session.isPending) {
     return (
       <main className="grid min-h-screen place-items-center bg-canvas">
-        <h1 className="font-display text-lg text-text-muted">{t("app.name")}</h1>
+        <div role="status" className="flex items-center gap-2 text-text-muted">
+          <Spinner />
+          <h1 className="font-display text-lg">{t("app.name")}</h1>
+        </div>
       </main>
     );
   }
@@ -29,8 +33,10 @@ export function App() {
             onClick={() => {
               void session.refetch();
             }}
-            className="text-sm text-accent underline underline-offset-2"
+            disabled={session.isFetching}
+            className="inline-flex items-center gap-2 text-sm text-accent underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
           >
+            {session.isFetching && <Spinner />}
             {t("app.retry")}
           </button>
         </div>

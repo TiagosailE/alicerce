@@ -6,10 +6,11 @@ const base =
   "inline-flex h-8 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-45";
 
 const variants: Record<Variant, string> = {
-  default: "border border-border-strong bg-surface-raised hover:bg-row-hover",
+  default:
+    "border border-border-strong bg-surface-raised hover:bg-row-hover active:bg-row-selected",
   primary:
-    "border border-accent bg-accent text-accent-contrast hover:border-accent-hover hover:bg-accent-hover",
-  quiet: "border border-transparent bg-transparent hover:bg-row-hover",
+    "border border-accent bg-accent text-accent-contrast hover:border-accent-hover hover:bg-accent-hover active:border-accent-hover active:bg-accent-hover",
+  quiet: "border border-transparent bg-transparent hover:bg-row-hover active:bg-row-selected",
 };
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant };
