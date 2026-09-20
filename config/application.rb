@@ -31,5 +31,10 @@ module Alicerce
     config.time_zone = "Brasilia"
     config.active_record.schema_format = :sql
     config.x.spa_index = Rails.root.join("frontend/dist/index.html")
+    # Served by SpaController, not copied into public/spa by the frontend
+    # build: public_file_server.headers below would cache it for a year as
+    # immutable, and unlike the hashed bundle assets its filename never
+    # changes to bust that cache.
+    config.x.theme_init_script = Rails.root.join("frontend/theme-init.js")
   end
 end

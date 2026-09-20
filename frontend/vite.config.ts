@@ -37,6 +37,7 @@ export default defineConfig(({ command }) => ({
     proxy: {
       "/api": rails,
       "/up": rails,
+      "/theme-init.js": rails,
     },
   },
   test: {

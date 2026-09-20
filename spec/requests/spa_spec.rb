@@ -57,6 +57,15 @@ RSpec.describe "SPA shell" do
     end
   end
 
+  it "serves theme-init.js with a short-lived cache, never the year-long immutable one static assets get" do
+    get "/theme-init.js"
+
+    expect(response).to have_http_status(:ok)
+    expect(response.media_type).to eq("application/javascript")
+    expect(response.headers["Cache-Control"]).to include("no-cache")
+    expect(response.body).to include("dataset.theme")
+  end
+
   it "does not hijack the health check" do
     get "/up"
 

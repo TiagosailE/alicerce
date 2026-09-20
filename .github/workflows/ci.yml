@@ -78,10 +78,17 @@ jobs:
           exit-code: "1"
       - name: Start the image with its default command, as Render runs it
         run: |
+          # Written to $GITHUB_ENV, not just passed to the container: the
+          # browser smoke test below signs in as a seeded demo user and
+          # needs this same value, not a guessable fixed one. $GITHUB_ENV
+          # only takes effect for later steps, so the docker run below still
+          # uses the local shell variable, not $SEED_USER_PASSWORD.
+          seed_password="$(openssl rand -hex 32)"
+          echo "SEED_USER_PASSWORD=$seed_password" >> "$GITHUB_ENV"
           docker run -d --name app --network host \
             -e DATABASE_URL=postgres://alicerce:alicerce@127.0.0.1:5432/alicerce_production \
             -e SECRET_KEY_BASE="$(openssl rand -hex 64)" \
-            -e SEED_USER_PASSWORD="$(openssl rand -hex 32)" \
+            -e SEED_USER_PASSWORD="$seed_password" \
             -e APP_HOST=127.0.0.1 \
             -e WEB_CONCURRENCY=0 -e RAILS_MAX_THREADS=3 -e SOLID_QUEUE_IN_PUMA=1 -e JOB_THREADS=1 \
             alicerce:ci

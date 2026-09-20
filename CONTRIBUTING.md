@@ -34,7 +34,7 @@ Jobs (Solid Queue, as threads inside Puma) and cache (Solid Cache) live in the p
 | Security checks | `bin/brakeman`, `bin/bundler-audit check --update`, `npm --prefix frontend audit` |
 | Database only | `docker compose up -d --wait db` |
 
-`bin/setup` starts Postgres through Docker Compose on 127.0.0.1:5433. To use a Postgres you already run, export `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` first. Every variable the app reads is listed in `.env.example`. Demo seeds arrive with each slice's models.
+`bin/setup` starts Postgres through Docker Compose on 127.0.0.1:5433. To use a Postgres you already run, export `PGHOST`, `PGPORT`, `PGUSER` and `PGPASSWORD` first. Every variable the app reads is listed in `.env.example`. Demo seeds arrive with each slice's models. The sign-in browser test authenticates as a seeded demo user, so it needs `SEED_USER_PASSWORD` exported in the shell that runs it, matching whatever value seeded the server under test.
 
 `bin/ci` runs lint, types, audits, Brakeman, the Ruby and frontend tests, the SPA build and a production header check. CI adds what cannot run locally: the production image started with Postgres (health, headers, Solid Queue, memory budget, a Chromium test that fails on any CSP violation), Trivy, gitleaks over the whole history, dependency review and CodeQL. A daily workflow audits dependencies on `main`.
 
