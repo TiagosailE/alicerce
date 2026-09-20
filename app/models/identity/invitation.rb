@@ -17,6 +17,9 @@ module Identity
     validates :role, inclusion: { in: Identity::Membership::ROLES }
     validates :token_digest, presence: true
 
+    # Still an open offer: what the members screen lists as cancellable.
+    scope :pending, -> { where(accepted_at: nil).where("expires_at > ?", Time.current) }
+
     def self.digest(token) = OpenSSL::Digest::SHA256.hexdigest(token)
 
     # Reads the invitation's organization through the SECURITY DEFINER

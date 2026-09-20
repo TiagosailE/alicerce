@@ -2,7 +2,13 @@ module Api
   module V1
     class MembershipsController < BaseController
       before_action :require_authentication!
-      before_action :verify_csrf_token!
+      before_action :verify_csrf_token!, only: %i[update destroy]
+
+      def index
+        authorize(Identity::Membership)
+        query = Identity::MembersQuery.new(policy_scope(Identity::Membership), page: params[:page], per_page: params[:per_page])
+        render json: { data: query.results.map { |membership| Identity::MemberSerializer.new(membership).as_json }, meta: query.meta }
+      end
 
       def update
         membership = find_membership

@@ -78,4 +78,14 @@ RSpec.describe Identity::Invitation do
       expect(invitation.accepted?).to be(true)
     end
   end
+
+  describe ".pending" do
+    it "excludes accepted and expired invitations" do
+      pending_invitation, = build_invitation
+      _accepted, = build_invitation(accepted_at: Time.current, accepted_by: create(:user))
+      _expired, = build_invitation(expires_at: 1.minute.ago)
+
+      expect(described_class.pending).to eq([ pending_invitation ])
+    end
+  end
 end

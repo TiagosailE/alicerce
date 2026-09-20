@@ -27,8 +27,12 @@ module Identity
         # (a double submit, or a client retry) would otherwise both read
         # accepted_at as nil and race each other into the unique index on
         # (organization_id, user_id), raising instead of failing cleanly.
-        invitation = Identity::Invitation.lock.find(@invitation.id)
-        return Result.failure(:invalid_token) if invitation.accepted? || invitation.expired?
+        # find_by, not find: a RevokeInvitation racing this same token can
+        # destroy the row between the caller's lookup and this lock, which
+        # must fail the same as any other invalid token, not raise
+        # RecordNotFound out of a command.
+        invitation = Identity::Invitation.lock.find_by(id: @invitation.id)
+        return Result.failure(:invalid_token) if invitation.nil? || invitation.accepted? || invitation.expired?
 
         user = find_or_create_user(invitation)
         return Result.invalid(user) if user.errors.any?

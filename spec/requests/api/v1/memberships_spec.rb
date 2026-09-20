@@ -16,6 +16,71 @@ RSpec.describe "Memberships API" do
     fetch_csrf_token
   end
 
+  describe "GET /api/v1/memberships" do
+    it "requires an existing session" do
+      get "/api/v1/memberships"
+
+      expect(response).to have_http_status(:unauthorized)
+      assert_response_schema_confirm(401)
+    end
+
+    # Role matrix (ADR 0008): only owner and admin manage members.
+    { "owner" => :ok, "admin" => :ok, "purchasing" => :forbidden, "sales" => :forbidden,
+      "finance" => :forbidden, "read_only" => :forbidden }.each do |role, expected_status|
+      it "answers #{expected_status} for the #{role} role" do
+        actor, = create_membership(organization, role:)
+        sign_in_via_api(email: actor.email, password:)
+
+        get "/api/v1/memberships"
+
+        expect(response).to have_http_status(expected_status)
+        assert_response_schema_confirm(response.status)
+        expect(response.parsed_body.dig("error", "code")).to eq("forbidden") if expected_status == :forbidden
+      end
+    end
+
+    it "denies a demo owner (ADR 0008)" do
+      demo_owner, = create_membership(organization, role: "owner", demo: true)
+      sign_in_via_api(email: demo_owner.email, password:)
+
+      get "/api/v1/memberships"
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "lists only the current organization's members, by name" do
+      owner, = create_membership(organization, role: "owner")
+      zeca, = create_membership(organization, role: "sales")
+      zeca.update!(name: "Zeca")
+      ana, = create_membership(organization, role: "finance")
+      ana.update!(name: "Ana")
+      create_membership(other_organization, role: "owner")
+      sign_in_via_api(email: owner.email, password:)
+
+      get "/api/v1/memberships"
+
+      expect(response).to have_http_status(:ok)
+      assert_response_schema_confirm(200)
+      body = response.parsed_body
+      names = body["data"].map { |member| member["user"]["name"] }
+      expect(names).to eq([ "Ana", owner.name, "Zeca" ])
+      expect(body["meta"]).to eq("page" => 1, "per_page" => 25, "total" => 3)
+    end
+
+    it "paginates with page and per_page" do
+      owner, = create_membership(organization, role: "owner")
+      3.times { create_membership(organization, role: "read_only") }
+      sign_in_via_api(email: owner.email, password:)
+
+      get "/api/v1/memberships", params: { page: 2, per_page: 2 }
+
+      expect(response).to have_http_status(:ok)
+      body = response.parsed_body
+      expect(body["data"].length).to eq(2)
+      expect(body["meta"]).to eq("page" => 2, "per_page" => 2, "total" => 4)
+    end
+  end
+
   describe "PATCH /api/v1/memberships/:id" do
     it "requires an existing session" do
       _member, membership = create_membership(organization, role: "sales")
