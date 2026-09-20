@@ -2,6 +2,7 @@ import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";
 
 type ErrorBody = components["schemas"]["Error"];
+type Meta = components["schemas"]["Meta"];
 interface ErrorEnvelope {
   error: ErrorBody;
 }
@@ -64,4 +65,14 @@ export function unwrap<T>(result: {
 /** For endpoints that answer 204 on success and only ever the error envelope otherwise. */
 export function unwrapEmpty(result: { error?: ErrorEnvelope; response: Response }): void {
   if (result.error) throw new ApiError(result.response.status, result.error.error);
+}
+
+/** Like unwrap, but for a paginated list response: keeps data and meta together. */
+export function unwrapList<T>(result: {
+  data?: { data: T[]; meta: Meta };
+  error?: ErrorEnvelope;
+  response: Response;
+}): { data: T[]; meta: Meta } {
+  if (result.error) throw new ApiError(result.response.status, result.error.error);
+  return result.data as { data: T[]; meta: Meta };
 }

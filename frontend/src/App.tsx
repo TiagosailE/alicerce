@@ -3,6 +3,7 @@ import { AppShell } from "./components/shell/AppShell";
 import { Spinner } from "./components/ui/Spinner";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { useSession } from "./features/identity/api";
+import { MembersScreen } from "./features/identity/MembersScreen";
 import { SignInScreen } from "./features/identity/SignInScreen";
 import { t } from "./i18n";
 
@@ -46,6 +47,14 @@ export function App() {
 
   const { user, membership } = session.data;
   const authenticated = Boolean(user && membership);
+  // Mirrors Identity::Capabilities.manage_members? (backend-enforced; this
+  // only decides what the SPA offers, never what it accepts).
+  const canManageMembers = Boolean(
+    user &&
+    membership &&
+    !user.demo &&
+    (membership.role === "owner" || membership.role === "admin"),
+  );
 
   return (
     <Routes>
@@ -57,8 +66,21 @@ export function App() {
         path="/*"
         element={
           authenticated && user && membership ? (
-            <AppShell organizationName={membership.organization.name} userName={user.name}>
-              <HomeScreen userName={user.name} />
+            <AppShell
+              organizationName={membership.organization.name}
+              userName={user.name}
+              canManageMembers={canManageMembers}
+            >
+              <Routes>
+                <Route path="/" element={<HomeScreen userName={user.name} />} />
+                {canManageMembers && (
+                  <Route
+                    path="/membros"
+                    element={<MembersScreen currentRole={membership.role} />}
+                  />
+                )}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
             </AppShell>
           ) : (
             <Navigate to="/entrar" replace />
