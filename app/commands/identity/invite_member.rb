@@ -3,7 +3,8 @@ module Identity
   # limited this to owner and admin, demo users excluded
   # (Identity::Capabilities.manage_members?), before this ever runs.
   #
-  # Error codes: :validation_failed (bad email or role),
+  # Error codes: :validation_failed (bad email or role), :owner_required
+  # (only an owner may invite someone as owner),
   # :already_member (that email already belongs to this organization).
   class InviteMember
     def self.call(...) = new(...).call
@@ -16,6 +17,8 @@ module Identity
     end
 
     def call
+      return Result.failure(:owner_required) if @role == "owner" && !actor_is_owner?
+
       ApplicationRecord.transaction do
         return Result.failure(:already_member) if already_member?
 
@@ -33,6 +36,13 @@ module Identity
     end
 
     private
+      # Without this, an admin could invite a fresh address as owner and
+      # accept it themselves, the same escalation ChangeMemberRole guards
+      # against on the promotion side.
+      def actor_is_owner?
+        @actor.membership_in(@organization)&.role == "owner"
+      end
+
       def already_member?
         user = Identity::User.find_by(email: @email)
         user.present? && user.membership_in(@organization).present?

@@ -90,6 +90,19 @@ RSpec.describe "Invitations API" do
       assert_response_schema_confirm(422)
       expect(response.parsed_body.dig("error", "code")).to eq("already_member")
     end
+
+    it "answers owner_required when an admin tries to invite someone as owner" do
+      admin = create_membership(organization, role: "admin")
+      csrf_token = sign_in_and_csrf(admin)
+
+      post "/api/v1/invitations", params: { email: "novo@alicerce.example", role: "owner" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "code")).to eq("owner_required")
+      set_current_tenant(organization)
+      expect(Identity::Invitation.count).to eq(0)
+    end
   end
 
   describe "POST /api/v1/invitations/acceptance" do

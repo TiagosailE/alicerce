@@ -54,4 +54,23 @@ RSpec.describe Identity::InviteMember do
     expect(result.error).to eq(:already_member)
     expect(Identity::Invitation.count).to eq(0)
   end
+
+  it "fails with owner_required when a non-owner actor invites someone as owner" do
+    create(:membership, organization:, user: actor, role: "admin")
+
+    result = described_class.call(organization:, email: "nova@alicerce.example", role: "owner", actor:)
+
+    expect(result).not_to be_success
+    expect(result.error).to eq(:owner_required)
+    expect(Identity::Invitation.count).to eq(0)
+  end
+
+  it "allows an owner actor to invite someone as owner" do
+    create(:membership, organization:, user: actor, role: "owner")
+
+    result = described_class.call(organization:, email: "nova@alicerce.example", role: "owner", actor:)
+
+    expect(result).to be_success
+    expect(result.value[:invitation].role).to eq("owner")
+  end
 end
