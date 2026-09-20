@@ -113,6 +113,33 @@ RSpec.describe "Memberships API" do
       assert_response_schema_confirm(422)
       expect(response.parsed_body.dig("error", "code")).to eq("last_owner")
     end
+
+    it "answers owner_required when an admin tries to promote a member to owner" do
+      admin, = create_membership(organization, role: "admin")
+      _member, membership = create_membership(organization, role: "sales")
+      csrf_token = sign_in_and_csrf(admin)
+
+      patch "/api/v1/memberships/#{membership.id}", params: { role: "owner" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "code")).to eq("owner_required")
+      expect(membership.reload.role).to eq("sales")
+    end
+
+    it "answers owner_required when an admin tries to demote an owner (self-promotion cannot dethrone the owner this way either)" do
+      admin, = create_membership(organization, role: "admin")
+      _owner, owner_membership = create_membership(organization, role: "owner")
+      create_membership(organization, role: "owner")
+      csrf_token = sign_in_and_csrf(admin)
+
+      patch "/api/v1/memberships/#{owner_membership.id}", params: { role: "admin" }, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "code")).to eq("owner_required")
+      expect(owner_membership.reload.role).to eq("owner")
+    end
   end
 
   describe "DELETE /api/v1/memberships/:id" do
@@ -201,6 +228,20 @@ RSpec.describe "Memberships API" do
       expect(response).to have_http_status(:unprocessable_content)
       assert_response_schema_confirm(422)
       expect(response.parsed_body.dig("error", "code")).to eq("last_owner")
+    end
+
+    it "answers owner_required when an admin tries to remove an owner" do
+      admin, = create_membership(organization, role: "admin")
+      _owner, owner_membership = create_membership(organization, role: "owner")
+      create_membership(organization, role: "owner")
+      csrf_token = sign_in_and_csrf(admin)
+
+      delete "/api/v1/memberships/#{owner_membership.id}", headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "code")).to eq("owner_required")
+      expect(Identity::Membership.exists?(owner_membership.id)).to be(true)
     end
   end
 end

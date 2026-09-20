@@ -92,4 +92,14 @@ RSpec.describe Identity::AcceptInvitation do
       expect(result.error).to eq(:already_member)
     end
   end
+
+  it "fails with invalid_token instead of raising when the invitation was already accepted (a concurrent replay)" do
+    invitation = invitation_for(email: "nova@alicerce.example")
+    invitation.update!(accepted_at: Time.current, accepted_by: create(:user))
+
+    result = described_class.call(invitation:, name: "Nova Pessoa", password: "senha-de-teste-longa")
+
+    expect(result).not_to be_success
+    expect(result.error).to eq(:invalid_token)
+  end
 end

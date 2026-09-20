@@ -65,7 +65,7 @@ RSpec.describe Identity::ChangeMemberRole do
   end
 
   it "fails with last_owner when demoting the organization's only owner" do
-    membership = create(:membership, organization:, user: create(:user), role: "owner")
+    membership = create(:membership, organization:, user: actor, role: "owner")
 
     result = described_class.call(membership:, role: "admin", actor:)
 
@@ -75,12 +75,45 @@ RSpec.describe Identity::ChangeMemberRole do
   end
 
   it "allows demoting an owner when another owner remains" do
+    create(:membership, organization:, user: actor, role: "owner")
     membership = create(:membership, organization:, user: create(:user), role: "owner")
-    create(:membership, organization:, user: create(:user), role: "owner")
 
     result = described_class.call(membership:, role: "admin", actor:)
 
     expect(result).to be_success
     expect(membership.reload.role).to eq("admin")
+  end
+
+  it "fails with owner_required when a non-owner actor tries to grant the owner role" do
+    create(:membership, organization:, user: actor, role: "admin")
+    membership = create(:membership, organization:, user: create(:user), role: "sales")
+
+    result = described_class.call(membership:, role: "owner", actor:)
+
+    expect(result).not_to be_success
+    expect(result.error).to eq(:owner_required)
+    expect(membership.reload.role).to eq("sales")
+  end
+
+  it "fails with owner_required when a non-owner actor tries to change an existing owner's role" do
+    create(:membership, organization:, user: actor, role: "admin")
+    membership = create(:membership, organization:, user: create(:user), role: "owner")
+    create(:membership, organization:, user: create(:user), role: "owner")
+
+    result = described_class.call(membership:, role: "admin", actor:)
+
+    expect(result).not_to be_success
+    expect(result.error).to eq(:owner_required)
+    expect(membership.reload.role).to eq("owner")
+  end
+
+  it "allows an owner actor to grant the owner role" do
+    create(:membership, organization:, user: actor, role: "owner")
+    membership = create(:membership, organization:, user: create(:user), role: "admin")
+
+    result = described_class.call(membership:, role: "owner", actor:)
+
+    expect(result).to be_success
+    expect(membership.reload.role).to eq("owner")
   end
 end

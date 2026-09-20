@@ -22,13 +22,21 @@ module Identity
       return Result.failure(:invalid_token) unless @invitation
 
       ApplicationRecord.transaction do
-        user = Identity::User.find_by(email: @invitation.email) || build_user
-        return Result.invalid(user) if user.new_record? && !user.save
+        # Locked and rechecked here, not trusted from the @invitation the
+        # caller looked up: two concurrent acceptances of the same token
+        # (a double submit, or a client retry) would otherwise both read
+        # accepted_at as nil and race each other into the unique index on
+        # (organization_id, user_id), raising instead of failing cleanly.
+        invitation = Identity::Invitation.lock.find(@invitation.id)
+        return Result.failure(:invalid_token) if invitation.accepted? || invitation.expired?
 
-        return Result.failure(:already_member) if user.membership_in(@invitation.organization).present?
+        user = find_or_create_user(invitation)
+        return Result.invalid(user) if user.errors.any?
 
-        membership = Identity::Membership.create!(organization: @invitation.organization, user:, role: @invitation.role)
-        @invitation.update!(accepted_at: Time.current, accepted_by: user)
+        return Result.failure(:already_member) if user.membership_in(invitation.organization).present?
+
+        membership = Identity::Membership.create!(organization: invitation.organization, user:, role: invitation.role)
+        invitation.update!(accepted_at: Time.current, accepted_by: user)
         Audit.record("member_joined", membership, actor: user, changes: { role: membership.role })
 
         Result.success(user:, membership:)
@@ -36,8 +44,29 @@ module Identity
     end
 
     private
-      def build_user
-        Identity::User.new(email: @invitation.email, name: @name, password: @password)
+      # Two different invitations to the same not-yet-registered email
+      # (from the same organization by mistake, or from two organizations
+      # at once) accepted at the same time both miss the check above and
+      # race the unique index on identity_users.email. The insert runs in
+      # its own savepoint, not the surrounding transaction, so losing that
+      # race does not abort the invitation and membership work still to
+      # come: the loser simply falls back to the winner's now-committed
+      # account, exactly like the already-has-an-account path below.
+      def find_or_create_user(invitation)
+        existing = Identity::User.find_by(email: invitation.email)
+        return existing if existing
+
+        user = build_user(invitation)
+        ApplicationRecord.transaction(requires_new: true) { user.save! }
+        user
+      rescue ActiveRecord::RecordInvalid
+        user
+      rescue ActiveRecord::RecordNotUnique
+        Identity::User.find_by!(email: invitation.email)
+      end
+
+      def build_user(invitation)
+        Identity::User.new(email: invitation.email, name: @name, password: @password)
       end
   end
 end

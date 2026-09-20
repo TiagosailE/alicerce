@@ -43,7 +43,7 @@ RSpec.describe Identity::RemoveMember do
   end
 
   it "fails with last_owner when removing the organization's only owner" do
-    membership = create(:membership, organization:, user: create(:user), role: "owner")
+    membership = create(:membership, organization:, user: actor, role: "owner")
 
     result = described_class.call(membership:, actor:)
 
@@ -53,12 +53,24 @@ RSpec.describe Identity::RemoveMember do
   end
 
   it "allows removing an owner when another owner remains" do
+    create(:membership, organization:, user: actor, role: "owner")
     membership = create(:membership, organization:, user: create(:user), role: "owner")
-    create(:membership, organization:, user: create(:user), role: "owner")
 
     result = described_class.call(membership:, actor:)
 
     expect(result).to be_success
     expect(Identity::Membership.exists?(membership.id)).to be(false)
+  end
+
+  it "fails with owner_required when a non-owner actor tries to remove an owner" do
+    create(:membership, organization:, user: actor, role: "admin")
+    membership = create(:membership, organization:, user: create(:user), role: "owner")
+    create(:membership, organization:, user: create(:user), role: "owner")
+
+    result = described_class.call(membership:, actor:)
+
+    expect(result).not_to be_success
+    expect(result.error).to eq(:owner_required)
+    expect(Identity::Membership.exists?(membership.id)).to be(true)
   end
 end
