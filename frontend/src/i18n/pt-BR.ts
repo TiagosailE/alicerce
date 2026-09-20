@@ -22,7 +22,6 @@ export const ptBR = {
   "signIn.chooseOrganizationTitle": "Escolha a organização",
   "signIn.chooseOrganizationHint": "Sua conta participa de mais de uma organização.",
   "signIn.back": "Voltar",
-  "signIn.continue": "Continuar",
 
   "shell.signOut": "Sair",
   "shell.toggleThemeToLight": "Mudar para tema claro",

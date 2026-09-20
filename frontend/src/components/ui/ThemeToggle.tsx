@@ -11,7 +11,7 @@ export function ThemeToggle() {
       onClick={toggle}
       aria-label={label}
       title={label}
-      className="grid h-8 w-8 place-items-center rounded-md text-text-muted hover:bg-row-hover hover:text-text"
+      className="grid h-8 w-8 place-items-center rounded-md text-text-muted hover:bg-row-hover hover:text-text active:bg-row-selected"
     >
       {theme === "dark" ? (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">

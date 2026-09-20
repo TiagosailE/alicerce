@@ -81,4 +81,12 @@ RSpec.describe "SPA shell" do
     expect(response).to have_http_status(:service_unavailable)
     expect(response.body).to include("npm --prefix frontend run build")
   end
+
+  it "answers not_found for theme-init.js if it were ever missing, instead of raising" do
+    allow(Rails.configuration.x).to receive(:theme_init_script).and_return(Rails.root.join("tmp/missing.js"))
+
+    get "/theme-init.js"
+
+    expect(response).to have_http_status(:not_found)
+  end
 end

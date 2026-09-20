@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { BrandMark } from "../ui/BrandMark";
 import { Button } from "../ui/Button";
+import { Spinner } from "../ui/Spinner";
 import { ThemeToggle } from "../ui/ThemeToggle";
 import { initials } from "../../lib/initials";
 import { t } from "../../i18n";
@@ -43,6 +44,7 @@ export function AppShell({
             }}
             disabled={signOut.isPending}
           >
+            {signOut.isPending && <Spinner />}
             {t("shell.signOut")}
           </Button>
         </div>
