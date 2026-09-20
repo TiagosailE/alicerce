@@ -20,8 +20,14 @@ function errorEnvelope(code: string, message: string, details: Record<string, un
   return jsonResponse({ error: { code, message, details, request_id: "req-1" } }, 422);
 }
 
-function listResponse(data: unknown[]) {
-  return jsonResponse({ data, meta: { page: 1, per_page: 25, total: data.length } });
+function listResponse(
+  data: unknown[],
+  meta: Partial<{ page: number; per_page: number; total: number }> = {},
+) {
+  return jsonResponse({
+    data,
+    meta: { page: 1, per_page: 25, total: data.length, ...meta },
+  });
 }
 
 /** An element a query already proved exists; narrows away `| null` without `!`. */
@@ -31,14 +37,16 @@ function found<T>(element: T | null): T {
 }
 
 /** Routes a fake fetch by "METHOD /path" against the Request openapi-fetch builds. */
-function createFetchMock(handlers: Record<string, () => Response>) {
+function createFetchMock(
+  handlers: Record<string, (request: Request) => Response | Promise<Response>>,
+) {
   return vi.fn((input: RequestInfo | URL) => {
     const request = input as Request;
     const path = new URL(request.url).pathname.replace(/^\/api\/v1/, "");
     const key = `${request.method} ${path}`;
     const handler = handlers[key];
     if (!handler) throw new Error(`Unhandled request in test: ${key}`);
-    return handler();
+    return handler(request);
   });
 }
 
@@ -76,13 +84,27 @@ function inviteFormRoleSelect() {
   return within(found(form)).getByLabelText("Papel");
 }
 
-function renderScreen(currentRole: Member["role"] = "owner") {
+// 999 never collides with a fixture's user id, so "isSelf" stays false
+// unless a test passes the matching id on purpose.
+function renderScreen(currentRole: Member["role"] = "owner", currentUserId = 999) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <MembersScreen currentRole={currentRole} />
+      <MembersScreen currentRole={currentRole} currentUserId={currentUserId} />
     </QueryClientProvider>,
   );
+}
+
+async function jsonBody(request: Request): Promise<unknown> {
+  return request.clone().json();
+}
+
+// Scoped because the empty pending-invitations state offers its own
+// "Convidar pessoa" button alongside the page's own, once no invitation
+// is pending.
+function topInviteButton() {
+  const container = found(screen.getByRole("heading", { name: "Membros" }).closest("div"));
+  return within(container).getByRole("button", { name: "Convidar pessoa" });
 }
 
 describe("MembersScreen", () => {
@@ -110,7 +132,7 @@ describe("MembersScreen", () => {
     expect(screen.getByText("convidada@alicerce.example")).toBeInTheDocument();
   });
 
-  it("shows the empty state when there are no pending invitations", async () => {
+  it("shows the empty state, with an invite action, when there are no pending invitations", async () => {
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -122,6 +144,79 @@ describe("MembersScreen", () => {
     renderScreen();
 
     expect(await screen.findByText("Nenhum convite pendente.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Convidar pessoa" })).toHaveLength(2);
+  });
+
+  it("retries loading members after a failed request", async () => {
+    let attempt = 0;
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /memberships": () => {
+          attempt += 1;
+          return attempt === 1
+            ? errorEnvelope("forbidden", "not allowed")
+            : listResponse([owner()]);
+        },
+        "GET /invitations": () => listResponse([]),
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Não foi possível carregar os membros.");
+    expect(alert).toHaveTextContent("ID da requisição: req-1");
+
+    await user.click(screen.getByRole("button", { name: "Tentar novamente" }));
+
+    expect(await screen.findByText("Joana Lima")).toBeInTheDocument();
+  });
+
+  it("paginates the members list", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /memberships": (request) => {
+          const page = Number(new URL(request.url).searchParams.get("page") ?? "1");
+          const data = page === 1 ? [owner()] : [salesMember()];
+          return listResponse(data, { page, per_page: 1, total: 2 });
+        },
+        "GET /invitations": () => listResponse([]),
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    expect(await screen.findByText("Joana Lima")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Página anterior" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Próxima página" }));
+
+    expect(await screen.findByText("Marcos Souza")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Próxima página" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Página anterior" })).not.toBeDisabled();
+  });
+
+  it("moves focus into the invite form when it opens, and back to the button when it closes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /memberships": () => listResponse([owner()]),
+        "GET /invitations": () => listResponse([]),
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await screen.findByText("Joana Lima");
+    await user.click(topInviteButton());
+
+    expect(screen.getByRole("heading", { name: "Convidar para a organização" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(topInviteButton()).toHaveFocus();
   });
 
   it("hides the owner role from an admin, in both the invite form and an owner's row", async () => {
@@ -143,7 +238,7 @@ describe("MembersScreen", () => {
     expect(within(ownerRow).getByText("Dono(a)")).toBeInTheDocument();
 
     // The invite form does not offer "Dono(a)" as a role to grant.
-    await user.click(screen.getByRole("button", { name: "Convidar pessoa" }));
+    await user.click(topInviteButton());
     const roleSelect = inviteFormRoleSelect();
     const options = within(roleSelect)
       .getAllByRole("option")
@@ -152,8 +247,10 @@ describe("MembersScreen", () => {
   });
 
   it("invites a new member with the chosen email and role", async () => {
-    const post = vi.fn(() =>
-      jsonResponse(
+    let requestBody: unknown;
+    const post = vi.fn(async (request: Request) => {
+      requestBody = await jsonBody(request);
+      return jsonResponse(
         {
           data: {
             id: 9,
@@ -164,8 +261,8 @@ describe("MembersScreen", () => {
           },
         },
         201,
-      ),
-    );
+      );
+    });
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -178,14 +275,16 @@ describe("MembersScreen", () => {
     renderScreen();
 
     await screen.findByText("Joana Lima");
-    await user.click(screen.getByRole("button", { name: "Convidar pessoa" }));
+    await user.click(topInviteButton());
     await user.type(screen.getByLabelText("E-mail"), "nova@alicerce.example");
     await user.selectOptions(inviteFormRoleSelect(), "sales");
     await user.click(screen.getByRole("button", { name: "Enviar convite" }));
 
     expect(post).toHaveBeenCalledTimes(1);
+    expect(requestBody).toMatchObject({ email: "nova@alicerce.example", role: "sales" });
     // The form closes again once the invite succeeds.
     expect(screen.queryByLabelText("E-mail")).not.toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("Convite enviado.");
   });
 
   it("shows a translated error when inviting an existing member", async () => {
@@ -201,13 +300,13 @@ describe("MembersScreen", () => {
     renderScreen();
 
     await screen.findByText("Joana Lima");
-    await user.click(screen.getByRole("button", { name: "Convidar pessoa" }));
+    await user.click(topInviteButton());
     await user.type(screen.getByLabelText("E-mail"), "joana@alicerce.example");
     await user.click(screen.getByRole("button", { name: "Enviar convite" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Essa pessoa já faz parte da organização.",
-    );
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Essa pessoa já faz parte da organização.");
+    expect(alert).toHaveTextContent("ID da requisição: req-1");
   });
 
   it("removes a member after confirmation", async () => {
@@ -231,6 +330,7 @@ describe("MembersScreen", () => {
       "Remover Marcos Souza da organização? A pessoa perde acesso imediatamente.",
     );
     expect(del).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("status")).toHaveTextContent("Pessoa removida da organização.");
   });
 
   it("does not remove a member when the confirmation is declined", async () => {
@@ -251,6 +351,32 @@ describe("MembersScreen", () => {
     await user.click(within(row).getByRole("button", { name: "Remover" }));
 
     expect(del).not.toHaveBeenCalled();
+  });
+
+  it("warns distinctly and marks your own row when removing yourself", async () => {
+    const del = vi.fn(noContent);
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /memberships": () => listResponse([owner()]),
+        "GET /invitations": () => listResponse([]),
+        "DELETE /memberships/1": del,
+      }),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
+    renderScreen("owner", owner().user.id);
+
+    await screen.findByText("joana@alicerce.example");
+    const youMarker = screen.getByText("(você)", { exact: false });
+    const row = found(youMarker.closest("tr"));
+
+    await user.click(within(row).getByRole("button", { name: "Remover" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      "Remover Joana Lima da organização? Você perderá o próprio acesso imediatamente.",
+    );
+    expect(del).toHaveBeenCalledTimes(1);
   });
 
   it("shows a translated error when removing the organization's only owner", async () => {
@@ -293,12 +419,15 @@ describe("MembersScreen", () => {
 
     expect(confirmSpy).toHaveBeenCalledWith("Cancelar o convite para convidada@alicerce.example?");
     expect(del).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("status")).toHaveTextContent("Convite cancelado.");
   });
 
   it("changes a member's role", async () => {
-    const patch = vi.fn(() =>
-      jsonResponse({ data: { id: 2, user: salesMember().user, role: "finance" } }),
-    );
+    let requestBody: unknown;
+    const patch = vi.fn(async (request: Request) => {
+      requestBody = await jsonBody(request);
+      return jsonResponse({ data: { id: 2, user: salesMember().user, role: "finance" } });
+    });
     vi.stubGlobal(
       "fetch",
       createFetchMock({
@@ -315,5 +444,7 @@ describe("MembersScreen", () => {
     await user.selectOptions(within(row).getByRole("combobox"), "finance");
 
     expect(patch).toHaveBeenCalledTimes(1);
+    expect(requestBody).toEqual({ role: "finance" });
+    expect(await screen.findByRole("status")).toHaveTextContent("Papel atualizado.");
   });
 });

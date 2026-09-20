@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, csrfHeader, setCsrfToken, unwrap, unwrapEmpty, unwrapList } from "../../api/client";
 import type { components } from "../../api/schema";
 
@@ -53,6 +53,9 @@ export function useMembers(page: number) {
     queryKey: membersKey(page),
     queryFn: async () =>
       unwrapList<Member>(await api.GET("/memberships", { params: { query: { page } } })),
+    // Keeps the current page's rows on screen while the next page loads,
+    // instead of the whole table vanishing behind a spinner on every turn.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -61,6 +64,7 @@ export function usePendingInvitations(page: number) {
     queryKey: invitationsKey(page),
     queryFn: async () =>
       unwrapList<PendingInvitation>(await api.GET("/invitations", { params: { query: { page } } })),
+    placeholderData: keepPreviousData,
   });
 }
 

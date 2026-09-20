@@ -1,4 +1,4 @@
-import { type SubmitEvent, useId, useState } from "react";
+import { type SubmitEvent, useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
@@ -17,8 +17,17 @@ import {
 
 const ALL_ROLES: Role[] = ["owner", "admin", "purchasing", "sales", "finance", "read_only"];
 
+type TableStatus = { kind: "success" | "error"; text: string } | null;
+
 function assignableRoles(isOwner: boolean): Role[] {
   return isOwner ? ALL_ROLES : ALL_ROLES.filter((role) => role !== "owner");
+}
+
+function requestIdSuffix(error: unknown): string {
+  if (error instanceof ApiError && error.requestId) {
+    return ` ${t("members.requestIdPrefix")}${error.requestId}`;
+  }
+  return "";
 }
 
 function inviteErrorMessage(error: unknown): string {
@@ -53,6 +62,39 @@ function revokeErrorMessage(error: unknown): string {
   return t("members.cancelInvitationGenericError");
 }
 
+/** A success/error line for the actions a table's rows trigger (role change,
+ * remove, cancel): cleared whenever a new action starts, so it never
+ * outlives the attempt it describes or hides behind an unrelated one. */
+function useTableStatus() {
+  const [status, setStatus] = useState<TableStatus>(null);
+
+  return {
+    status,
+    clear: () => {
+      setStatus(null);
+    },
+    succeed: (text: string) => {
+      setStatus({ kind: "success", text });
+    },
+    fail: (message: string, error: unknown) => {
+      setStatus({ kind: "error", text: `${message}${requestIdSuffix(error)}` });
+    },
+  };
+}
+
+function StatusMessage({ status }: { status: TableStatus }) {
+  if (!status) return null;
+
+  return (
+    <p
+      role={status.kind === "error" ? "alert" : "status"}
+      className={`mb-2 text-sm ${status.kind === "error" ? "text-danger" : "text-success"}`}
+    >
+      {status.text}
+    </p>
+  );
+}
+
 function SectionLoading({ label }: { label: string }) {
   return (
     <div role="status" className="flex items-center gap-2 py-4 text-sm text-text-muted">
@@ -62,13 +104,22 @@ function SectionLoading({ label }: { label: string }) {
   );
 }
 
-function SectionError({ message, onRetry }: { message: string; onRetry: () => void }) {
+function SectionError({
+  message,
+  error,
+  onRetry,
+}: {
+  message: string;
+  error: unknown;
+  onRetry: () => void;
+}) {
   return (
     <div className="rounded-md border border-border-subtle bg-surface-raised p-4">
-      <p role="alert" className="mb-2 text-sm text-danger">
+      <p role="alert" className="mb-1 text-sm text-danger">
         {message}
+        {requestIdSuffix(error)}
       </p>
-      <Button onClick={onRetry}>{t("members.retry")}</Button>
+      <Button onClick={onRetry}>{t("app.retry")}</Button>
     </div>
   );
 }
@@ -120,36 +171,48 @@ function PaginationControls({
 function MemberRow({
   member,
   isOwner,
+  isSelf,
+  pendingRole,
+  roleChangePending,
   onChangeRole,
   onRemove,
   removePending,
 }: {
   member: Member;
   isOwner: boolean;
+  isSelf: boolean;
+  pendingRole: Role | null;
+  roleChangePending: boolean;
   onChangeRole: (role: Role) => void;
   onRemove: () => void;
   removePending: boolean;
 }) {
   const roleId = useId();
   const manageable = isOwner || member.role !== "owner";
+  const displayedRole = pendingRole ?? member.role;
 
   return (
     <tr className="border-b border-border-subtle last:border-0 hover:bg-row-hover">
-      <td className="py-2 pr-3 text-text">{member.user.name}</td>
+      <td className="py-2 pr-3 text-text">
+        {member.user.name}
+        {isSelf && <span className="text-text-muted">{t("members.you")}</span>}
+      </td>
       <td className="py-2 pr-3 text-text-muted">{member.user.email}</td>
       <td className="py-2 pr-3">
         {manageable ? (
           <>
             <label htmlFor={roleId} className="sr-only">
-              {t("members.tableRole")}
+              {t("members.roleForPrefix")}
+              {member.user.name}
             </label>
             <select
               id={roleId}
-              value={member.role}
+              value={displayedRole}
+              disabled={roleChangePending}
               onChange={(event) => {
                 onChangeRole(event.target.value as Role);
               }}
-              className="h-8 rounded-md border border-border-strong bg-surface px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-focus"
+              className="h-8 rounded-md border border-border-strong bg-surface px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-focus disabled:cursor-not-allowed disabled:opacity-45"
             >
               {assignableRoles(isOwner).map((role) => (
                 <option key={role} value={role}>
@@ -170,12 +233,15 @@ function MemberRow({
             variant="quiet"
             disabled={removePending}
             onClick={() => {
-              const message = `${t("members.removeConfirmPrefix")}${member.user.name}${t("members.removeConfirmSuffix")}`;
+              const suffix = isSelf
+                ? t("members.removeSelfConfirmSuffix")
+                : t("members.removeConfirmSuffix");
+              const message = `${t("members.removeConfirmPrefix")}${member.user.name}${suffix}`;
               if (window.confirm(message)) onRemove();
             }}
           >
             {removePending && <Spinner />}
-            {t("members.remove")}
+            {removePending ? t("members.removing") : t("members.remove")}
           </Button>
         )}
       </td>
@@ -186,20 +252,22 @@ function MemberRow({
 function MembersTable({
   query,
   isOwner,
+  currentUserId,
   onChangeRole,
   onRemove,
-  changeRoleError,
-  removeError,
+  status,
   removePendingId,
+  pendingRoleChange,
   onPage,
 }: {
   query: ReturnType<typeof useMembers>;
   isOwner: boolean;
+  currentUserId: number;
   onChangeRole: (id: number, role: Role) => void;
   onRemove: (id: number) => void;
-  changeRoleError: string | null;
-  removeError: string | null;
+  status: TableStatus;
   removePendingId: number | null;
+  pendingRoleChange: { id: number; role: Role } | null;
   onPage: (page: number) => void;
 }) {
   if (query.isPending) return <SectionLoading label={t("members.loading")} />;
@@ -207,6 +275,7 @@ function MembersTable({
     return (
       <SectionError
         message={t("members.loadError")}
+        error={query.error}
         onRetry={() => {
           void query.refetch();
         }}
@@ -218,12 +287,9 @@ function MembersTable({
 
   return (
     <div>
-      {(changeRoleError ?? removeError) && (
-        <p role="alert" className="mb-2 text-sm text-danger">
-          {changeRoleError ?? removeError}
-        </p>
-      )}
+      <StatusMessage status={status} />
       <table className="w-full border-collapse text-sm">
+        <caption className="sr-only">{t("members.title")}</caption>
         <thead>
           <tr className="border-b border-border-subtle text-left text-text-muted">
             <th className="py-2 pr-3 font-medium">{t("members.tableName")}</th>
@@ -238,6 +304,9 @@ function MembersTable({
               key={member.id}
               member={member}
               isOwner={isOwner}
+              isSelf={member.user.id === currentUserId}
+              pendingRole={pendingRoleChange?.id === member.id ? pendingRoleChange.role : null}
+              roleChangePending={pendingRoleChange?.id === member.id}
               onChangeRole={(role) => {
                 onChangeRole(member.id, role);
               }}
@@ -288,7 +357,7 @@ function InvitationRow({
           }}
         >
           {revokePending && <Spinner />}
-          {t("members.cancelInvitation")}
+          {revokePending ? t("members.cancelingInvitation") : t("members.cancelInvitation")}
         </Button>
       </td>
     </tr>
@@ -298,21 +367,24 @@ function InvitationRow({
 function PendingInvitationsTable({
   query,
   onRevoke,
-  revokeError,
+  status,
   revokePendingId,
   onPage,
+  onInviteClick,
 }: {
   query: ReturnType<typeof usePendingInvitations>;
   onRevoke: (id: number) => void;
-  revokeError: string | null;
+  status: TableStatus;
   revokePendingId: number | null;
   onPage: (page: number) => void;
+  onInviteClick: () => void;
 }) {
   if (query.isPending) return <SectionLoading label={t("members.loading")} />;
   if (query.isError) {
     return (
       <SectionError
         message={t("members.pendingInvitationsLoadError")}
+        error={query.error}
         onRetry={() => {
           void query.refetch();
         }}
@@ -323,17 +395,20 @@ function PendingInvitationsTable({
   const { data, meta } = query.data;
 
   if (data.length === 0) {
-    return <p className="text-sm text-text-muted">{t("members.pendingInvitationsEmpty")}</p>;
+    return (
+      <div>
+        <StatusMessage status={status} />
+        <p className="mb-3 text-sm text-text-muted">{t("members.pendingInvitationsEmpty")}</p>
+        <Button onClick={onInviteClick}>{t("members.inviteButton")}</Button>
+      </div>
+    );
   }
 
   return (
     <div>
-      {revokeError && (
-        <p role="alert" className="mb-2 text-sm text-danger">
-          {revokeError}
-        </p>
-      )}
+      <StatusMessage status={status} />
       <table className="w-full border-collapse text-sm">
+        <caption className="sr-only">{t("members.pendingInvitationsTitle")}</caption>
         <thead>
           <tr className="border-b border-border-subtle text-left text-text-muted">
             <th className="py-2 pr-3 font-medium">{t("members.tableEmail")}</th>
@@ -369,10 +444,14 @@ function PendingInvitationsTable({
 function InviteForm({
   isOwner,
   mutation,
+  headingRef,
+  onInvited,
   onClose,
 }: {
   isOwner: boolean;
   mutation: ReturnType<typeof useInviteMember>;
+  headingRef: React.RefObject<HTMLHeadingElement | null>;
+  onInvited: () => void;
   onClose: () => void;
 }) {
   const [email, setEmail] = useState("");
@@ -389,6 +468,7 @@ function InviteForm({
         onSuccess: () => {
           setEmail("");
           setRole("read_only");
+          onInvited();
           onClose();
         },
       },
@@ -400,7 +480,13 @@ function InviteForm({
       onSubmit={submit}
       className="mb-5 rounded-md border border-border-subtle bg-surface-raised p-4"
     >
-      <h2 className="font-display mb-3 text-base text-text">{t("members.inviteFormTitle")}</h2>
+      <h2
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-display mb-3 text-base text-text outline-none"
+      >
+        {t("members.inviteFormTitle")}
+      </h2>
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <div>
           <label htmlFor={emailId} className="mb-1 block text-sm font-medium text-text">
@@ -449,17 +535,27 @@ function InviteForm({
       {mutation.isError && (
         <p id={errorId} role="alert" className="text-sm text-danger">
           {inviteErrorMessage(mutation.error)}
+          {requestIdSuffix(mutation.error)}
         </p>
       )}
     </form>
   );
 }
 
-export function MembersScreen({ currentRole }: { currentRole: Role }) {
+export function MembersScreen({
+  currentRole,
+  currentUserId,
+}: {
+  currentRole: Role;
+  currentUserId: number;
+}) {
   const isOwner = currentRole === "owner";
   const [membersPage, setMembersPage] = useState(1);
   const [invitationsPage, setInvitationsPage] = useState(1);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const inviteHeadingRef = useRef<HTMLHeadingElement>(null);
+  const inviteButtonRef = useRef<HTMLButtonElement>(null);
+  const isFirstInviteToggle = useRef(true);
 
   const members = useMembers(membersPage);
   const invitations = usePendingInvitations(invitationsPage);
@@ -467,6 +563,31 @@ export function MembersScreen({ currentRole }: { currentRole: Role }) {
   const revokeInvitation = useRevokeInvitation();
   const changeMemberRole = useChangeMemberRole();
   const removeMember = useRemoveMember();
+  const memberStatus = useTableStatus();
+  const invitationStatus = useTableStatus();
+
+  // Moves focus into the form when it opens and back to the button that
+  // opens it when it closes, the same reasoning as SignInScreen's step
+  // transitions: neither is a full navigation, so nothing else would tell a
+  // keyboard or screen reader user the content under their cursor changed.
+  // Skips the very first render, where forcing focus onto the button would
+  // fight whatever the browser or the user's own navigation already focused.
+  useEffect(() => {
+    if (isFirstInviteToggle.current) {
+      isFirstInviteToggle.current = false;
+      return;
+    }
+    if (inviteOpen) {
+      inviteHeadingRef.current?.focus();
+    } else {
+      inviteButtonRef.current?.focus();
+    }
+  }, [inviteOpen]);
+
+  function closeInviteForm() {
+    setInviteOpen(false);
+    inviteMember.reset();
+  }
 
   return (
     <div>
@@ -474,6 +595,7 @@ export function MembersScreen({ currentRole }: { currentRole: Role }) {
         <h1 className="font-display text-2xl text-text">{t("members.title")}</h1>
         {!inviteOpen && (
           <Button
+            ref={inviteButtonRef}
             variant="primary"
             onClick={() => {
               setInviteOpen(true);
@@ -488,27 +610,46 @@ export function MembersScreen({ currentRole }: { currentRole: Role }) {
         <InviteForm
           isOwner={isOwner}
           mutation={inviteMember}
-          onClose={() => {
-            setInviteOpen(false);
-            inviteMember.reset();
+          headingRef={inviteHeadingRef}
+          onInvited={() => {
+            invitationStatus.succeed(t("members.inviteSuccess"));
           }}
+          onClose={closeInviteForm}
         />
       )}
 
       <MembersTable
         query={members}
         isOwner={isOwner}
+        currentUserId={currentUserId}
         onChangeRole={(id, role) => {
-          changeMemberRole.mutate({ id, role });
+          memberStatus.clear();
+          changeMemberRole.mutate(
+            { id, role },
+            {
+              onSuccess: () => {
+                memberStatus.succeed(t("members.changeRoleSuccess"));
+              },
+              onError: (error) => {
+                memberStatus.fail(changeRoleErrorMessage(error), error);
+              },
+            },
+          );
         }}
         onRemove={(id) => {
-          removeMember.mutate(id);
+          memberStatus.clear();
+          removeMember.mutate(id, {
+            onSuccess: () => {
+              memberStatus.succeed(t("members.removeSuccess"));
+            },
+            onError: (error) => {
+              memberStatus.fail(removeErrorMessage(error), error);
+            },
+          });
         }}
-        changeRoleError={
-          changeMemberRole.isError ? changeRoleErrorMessage(changeMemberRole.error) : null
-        }
-        removeError={removeMember.isError ? removeErrorMessage(removeMember.error) : null}
+        status={memberStatus.status}
         removePendingId={removeMember.isPending ? removeMember.variables : null}
+        pendingRoleChange={changeMemberRole.isPending ? changeMemberRole.variables : null}
         onPage={setMembersPage}
       />
 
@@ -518,11 +659,22 @@ export function MembersScreen({ currentRole }: { currentRole: Role }) {
       <PendingInvitationsTable
         query={invitations}
         onRevoke={(id) => {
-          revokeInvitation.mutate(id);
+          invitationStatus.clear();
+          revokeInvitation.mutate(id, {
+            onSuccess: () => {
+              invitationStatus.succeed(t("members.cancelInvitationSuccess"));
+            },
+            onError: (error) => {
+              invitationStatus.fail(revokeErrorMessage(error), error);
+            },
+          });
         }}
-        revokeError={revokeInvitation.isError ? revokeErrorMessage(revokeInvitation.error) : null}
+        status={invitationStatus.status}
         revokePendingId={revokeInvitation.isPending ? revokeInvitation.variables : null}
         onPage={setInvitationsPage}
+        onInviteClick={() => {
+          setInviteOpen(true);
+        }}
       />
     </div>
   );
