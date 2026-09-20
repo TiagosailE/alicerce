@@ -76,7 +76,9 @@ export function App() {
                 {canManageMembers && (
                   <Route
                     path="/membros"
-                    element={<MembersScreen currentRole={membership.role} />}
+                    element={
+                      <MembersScreen currentRole={membership.role} currentUserId={user.id} />
+                    }
                   />
                 )}
                 <Route path="*" element={<Navigate to="/" replace />} />
