@@ -21,6 +21,10 @@ test("signs in as a seeded demo user, lands on the app shell, then signs out", a
   await expect(page.getByRole("heading", { name: /Joana Lima/ })).toBeVisible();
   await expect(page.getByText("Cânion Materiais de Construção")).toBeVisible();
 
+  // A demo account, owner role or not, never gets member management (ADR
+  // 0008): the nav link must not even appear, not just be blocked server side.
+  await expect(page.getByRole("link", { name: "Membros" })).not.toBeVisible();
+
   await page.getByRole("button", { name: "Sair" }).click();
 
   await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
