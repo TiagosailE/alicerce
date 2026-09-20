@@ -1,1 +1,141 @@
 @import "tailwindcss";
+
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 400 800;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url("./assets/fonts/archivo-variable-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/ibm-plex-mono-400-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/ibm-plex-mono-500-latin.woff2") format("woff2");
+}
+
+/*
+ * Semantic tokens as plain custom properties, not Tailwind's static theme
+ * values: [data-theme="dark"] below overrides them at runtime, and @theme
+ * just points the generated utilities (bg-canvas, text-muted, ...) at them.
+ */
+:root {
+  --canvas: #e9ecea;
+  --surface: #f8f9f8;
+  --surface-raised: #ffffff;
+  --border-subtle: #d3d8d6;
+  --border-strong: #a9b1ae;
+  --text: #1d2321;
+  --text-muted: #5e6763;
+  --accent: #a84a22;
+  --accent-hover: #8f3d1a;
+  --accent-contrast: #ffffff;
+  --focus: #a84a22;
+  --row-hover: #f1f3f2;
+  --row-selected: #f5e4db;
+  --success: #1f6b3f;
+  --warning: #7f4e00;
+  --danger: #a1261b;
+  --info: #26587f;
+  --idle: #4a534f;
+}
+
+[data-theme="dark"] {
+  --canvas: #111514;
+  --surface: #181d1c;
+  --surface-raised: #1f2524;
+  --border-subtle: #2e3634;
+  --border-strong: #4a5451;
+  --text: #e4e8e6;
+  --text-muted: #9aa39f;
+  --accent: #e07a4f;
+  --accent-hover: #ea9270;
+  --accent-contrast: #151918;
+  --focus: #e07a4f;
+  --row-hover: #1d2322;
+  --row-selected: #33211a;
+  --success: #7dd3a0;
+  --warning: #f0c06a;
+  --danger: #f29b8f;
+  --info: #8dbbe3;
+  --idle: #b3bbb7;
+}
+
+@theme {
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-focus: var(--focus);
+  --color-row-hover: var(--row-hover);
+  --color-row-selected: var(--row-selected);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-idle: var(--idle);
+
+  --radius-md: 5px;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+  }
+  body {
+    background-color: var(--canvas);
+    color: var(--text);
+    font-variation-settings: "wdth" 100;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-variation-settings: "wdth" 78;
+    font-weight: 750;
+    letter-spacing: -0.005em;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @layer base {
+    button,
+    a,
+    input {
+      transition:
+        background-color 120ms ease,
+        border-color 120ms ease,
+        color 120ms ease;
+    }
+  }
+}

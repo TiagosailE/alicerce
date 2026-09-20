@@ -32,7 +32,13 @@ export default defineConfig([
     },
   },
   {
+    files: ["theme-init.js"],
+    extends: [js.configs.recommended],
+    languageOptions: { globals: globals.browser },
+  },
+  {
     files: ["**/*.js"],
+    ignores: ["theme-init.js"],
     extends: [js.configs.recommended],
     languageOptions: { globals: globals.node },
   },

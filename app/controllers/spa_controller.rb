@@ -11,4 +11,11 @@ class SpaController < ActionController::API
       render plain: "Frontend not built. Run: npm --prefix frontend run build", status: :service_unavailable
     end
   end
+
+  # Sets data-theme on <html> before first paint (design-system skill): a
+  # plain script tag, not inline, since the CSP has no unsafe-inline.
+  def theme_init
+    response.headers["Cache-Control"] = "no-cache"
+    render plain: Rails.configuration.x.theme_init_script.read, content_type: "application/javascript"
+  end
 end

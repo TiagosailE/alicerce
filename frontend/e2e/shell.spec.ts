@@ -21,7 +21,10 @@ for (const path of ["/", "/estoque/produtos/42"]) {
 
     expect(response?.status()).toBe(200);
     expect(response?.headers()["content-security-policy"]).toContain("default-src 'none'");
-    await expect(page.getByRole("heading", { name: "Alicerce" })).toBeVisible();
+    // Neither path has a session cookie, so both redirect client-side to the
+    // sign-in screen; that redirect happening at all is itself evidence the
+    // shell booted and CSP-safe scripts ran.
+    await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
     expect(await page.evaluate(() => window.cspViolations)).toEqual([]);
   });
 }

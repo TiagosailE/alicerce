@@ -28,6 +28,8 @@ Rails.application.routes.draw do
     request.format.html? && File.extname(request.path).empty? && !request.path.match?(%r{\A/(api|spa)(/|\z)})
   end
 
+  get "theme-init.js", to: "spa#theme_init"
+
   root "spa#show"
   get "*path", to: "spa#show", format: false, constraints: spa_page
 end

@@ -1,12 +1,64 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AppShell } from "./components/shell/AppShell";
+import { HomeScreen } from "./features/home/HomeScreen";
+import { useSession } from "./features/identity/api";
+import { SignInScreen } from "./features/identity/SignInScreen";
 import { t } from "./i18n";
 
 export function App() {
+  const session = useSession();
+
+  if (session.isPending) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-canvas">
+        <h1 className="font-display text-lg text-text-muted">{t("app.name")}</h1>
+      </main>
+    );
+  }
+
+  if (session.isError) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-canvas px-4">
+        <div className="text-center">
+          <h1 className="font-display mb-3 text-lg text-text">{t("app.name")}</h1>
+          <p role="alert" className="mb-3 text-sm text-danger">
+            {t("app.loadError")}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              void session.refetch();
+            }}
+            className="text-sm text-accent underline underline-offset-2"
+          >
+            {t("app.retry")}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  const { user, membership } = session.data;
+  const authenticated = Boolean(user && membership);
+
   return (
-    <main className="grid min-h-screen place-items-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold">{t("app.name")}</h1>
-        <p className="mt-2 text-sm">{t("app.tagline")}</p>
-      </div>
-    </main>
+    <Routes>
+      <Route
+        path="/entrar"
+        element={authenticated ? <Navigate to="/" replace /> : <SignInScreen />}
+      />
+      <Route
+        path="/*"
+        element={
+          authenticated && user && membership ? (
+            <AppShell organizationName={membership.organization.name} userName={user.name}>
+              <HomeScreen userName={user.name} />
+            </AppShell>
+          ) : (
+            <Navigate to="/entrar" replace />
+          )
+        }
+      />
+    </Routes>
   );
 }
