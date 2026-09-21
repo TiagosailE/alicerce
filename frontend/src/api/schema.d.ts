@@ -63,6 +63,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's units of measure
+         * @description Every role can read (ADR 0008); owner, admin and purchasing can also write.
+         */
+        get: operations["listUnits"];
+        put?: never;
+        /**
+         * Create a unit of measure
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        post: operations["createUnit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/units/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a unit of measure
+         * @description Every role can read (ADR 0008).
+         */
+        get: operations["showUnit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a unit of measure
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        patch: operations["updateUnit"];
+        trace?: never;
+    };
+    "/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's product categories
+         * @description Every role can read (ADR 0008); owner, admin and purchasing can also write.
+         */
+        get: operations["listCategories"];
+        put?: never;
+        /**
+         * Create a product category
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        post: operations["createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a product category
+         * @description Every role can read (ADR 0008).
+         */
+        get: operations["showCategory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a product category
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        patch: operations["updateCategory"];
+        trace?: never;
+    };
+    "/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's products
+         * @description Every role can read (ADR 0008); owner, admin and purchasing can also write.
+         */
+        get: operations["listProducts"];
+        put?: never;
+        /**
+         * Create a product
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        post: operations["createProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a product
+         * @description Every role can read (ADR 0008).
+         */
+        get: operations["showProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a product
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        patch: operations["updateProduct"];
+        trace?: never;
+    };
     "/invitations": {
         parameters: {
             query?: never;
@@ -374,6 +518,87 @@ export interface components {
             current_password: string;
             password: string;
         };
+        Unit: {
+            id: number;
+            code: string;
+            name: string;
+            active: boolean;
+        };
+        UnitResponseBody: {
+            data: components["schemas"]["Unit"];
+        };
+        UnitListResponseBody: {
+            data: components["schemas"]["Unit"][];
+            meta: components["schemas"]["Meta"];
+        };
+        CreateUnitRequest: {
+            code: string;
+            name: string;
+        };
+        UpdateUnitRequest: {
+            code: string;
+            name: string;
+            active: boolean;
+        };
+        Category: {
+            id: number;
+            name: string;
+            active: boolean;
+        };
+        CategoryResponseBody: {
+            data: components["schemas"]["Category"];
+        };
+        CategoryListResponseBody: {
+            data: components["schemas"]["Category"][];
+            meta: components["schemas"]["Meta"];
+        };
+        CreateCategoryRequest: {
+            name: string;
+        };
+        UpdateCategoryRequest: {
+            name: string;
+            active: boolean;
+        };
+        UnitConversion: {
+            purchase_unit: components["schemas"]["Unit"];
+            /** @description Decimal string, 6 places (ADR 0006). Stock quantity = purchase quantity x factor. */
+            factor: string;
+        };
+        Product: {
+            id: number;
+            sku: string;
+            name: string;
+            active: boolean;
+            category: components["schemas"]["Category"] | null;
+            stock_unit: components["schemas"]["Unit"];
+            unit_conversion: components["schemas"]["UnitConversion"];
+        };
+        ProductResponseBody: {
+            data: components["schemas"]["Product"];
+        };
+        ProductListResponseBody: {
+            data: components["schemas"]["Product"][];
+            meta: components["schemas"]["Meta"];
+        };
+        CreateProductRequest: {
+            sku: string;
+            name: string;
+            category_id?: number | null;
+            stock_unit_id: number;
+            purchase_unit_id: number;
+            /** @description Decimal string, up to 6 places (ADR 0006). */
+            factor: string;
+        };
+        UpdateProductRequest: {
+            sku: string;
+            name: string;
+            category_id?: number | null;
+            stock_unit_id: number;
+            purchase_unit_id: number;
+            /** @description Decimal string, up to 6 places (ADR 0006). */
+            factor: string;
+            active: boolean;
+        };
     };
     responses: {
         /** @description The current session, if any, and a CSRF token. */
@@ -437,6 +662,60 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["PendingInvitationListResponseBody"];
+            };
+        };
+        /** @description A unit of measure. */
+        UnitResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["UnitResponseBody"];
+            };
+        };
+        /** @description A page of the current organization's units of measure. */
+        UnitListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["UnitListResponseBody"];
+            };
+        };
+        /** @description A product category. */
+        CategoryResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CategoryResponseBody"];
+            };
+        };
+        /** @description A page of the current organization's product categories. */
+        CategoryListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CategoryListResponseBody"];
+            };
+        };
+        /** @description A product. */
+        ProductResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ProductResponseBody"];
+            };
+        };
+        /** @description A page of the current organization's products. */
+        ProductListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ProductListResponseBody"];
             };
         };
     };
@@ -538,6 +817,253 @@ export interface operations {
             200: components["responses"]["AuditEventListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+        };
+    };
+    listUnits: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["UnitListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createUnit: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUnitRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["UnitResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    showUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["UnitResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateUnit: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUnitRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["UnitResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    listCategories: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CategoryListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["CategoryResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    showCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["CategoryResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateCategory: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCategoryRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["CategoryResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    listProducts: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                category_id?: number;
+                active?: boolean;
+                /** @description Case-insensitive search over name and sku. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ProductListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createProduct: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProductRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["ProductResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    showProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ProductResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ProductResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     listInvitations: {

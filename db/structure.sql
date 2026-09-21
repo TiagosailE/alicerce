@@ -133,6 +133,144 @@ ALTER SEQUENCE public.audit_events_id_seq OWNED BY public.audit_events.id;
 
 
 --
+-- Name: catalog_categories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.catalog_categories (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    name character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: catalog_categories_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.catalog_categories_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: catalog_categories_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.catalog_categories_id_seq OWNED BY public.catalog_categories.id;
+
+
+--
+-- Name: catalog_products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.catalog_products (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    sku character varying NOT NULL,
+    name character varying NOT NULL,
+    category_id bigint,
+    stock_unit_id bigint NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: catalog_products_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.catalog_products_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: catalog_products_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.catalog_products_id_seq OWNED BY public.catalog_products.id;
+
+
+--
+-- Name: catalog_unit_conversions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.catalog_unit_conversions (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    purchase_unit_id bigint NOT NULL,
+    factor numeric(15,6) NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT catalog_unit_conversions_factor_positive CHECK ((factor > (0)::numeric))
+);
+
+
+--
+-- Name: catalog_unit_conversions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.catalog_unit_conversions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: catalog_unit_conversions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.catalog_unit_conversions_id_seq OWNED BY public.catalog_unit_conversions.id;
+
+
+--
+-- Name: catalog_units; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.catalog_units (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    code character varying NOT NULL,
+    name character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: catalog_units_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.catalog_units_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: catalog_units_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.catalog_units_id_seq OWNED BY public.catalog_units.id;
+
+
+--
 -- Name: identity_invitations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -801,6 +939,34 @@ ALTER TABLE ONLY public.audit_events ALTER COLUMN id SET DEFAULT nextval('public
 
 
 --
+-- Name: catalog_categories id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_categories ALTER COLUMN id SET DEFAULT nextval('public.catalog_categories_id_seq'::regclass);
+
+
+--
+-- Name: catalog_products id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_products ALTER COLUMN id SET DEFAULT nextval('public.catalog_products_id_seq'::regclass);
+
+
+--
+-- Name: catalog_unit_conversions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_unit_conversions ALTER COLUMN id SET DEFAULT nextval('public.catalog_unit_conversions_id_seq'::regclass);
+
+
+--
+-- Name: catalog_units id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_units ALTER COLUMN id SET DEFAULT nextval('public.catalog_units_id_seq'::regclass);
+
+
+--
 -- Name: identity_invitations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -947,6 +1113,38 @@ ALTER TABLE ONLY public.ar_internal_metadata
 
 ALTER TABLE ONLY public.audit_events
     ADD CONSTRAINT audit_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: catalog_categories catalog_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_categories
+    ADD CONSTRAINT catalog_categories_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: catalog_products catalog_products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_products
+    ADD CONSTRAINT catalog_products_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: catalog_unit_conversions catalog_unit_conversions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_unit_conversions
+    ADD CONSTRAINT catalog_unit_conversions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: catalog_units catalog_units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_units
+    ADD CONSTRAINT catalog_units_pkey PRIMARY KEY (id);
 
 
 --
@@ -1135,6 +1333,90 @@ CREATE INDEX index_audit_events_on_organization_id ON public.audit_events USING 
 --
 
 CREATE INDEX index_audit_events_on_organization_id_and_created_at ON public.audit_events USING btree (organization_id, created_at);
+
+
+--
+-- Name: index_catalog_categories_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_catalog_categories_on_organization_id ON public.catalog_categories USING btree (organization_id);
+
+
+--
+-- Name: index_catalog_categories_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_categories_on_organization_id_and_id ON public.catalog_categories USING btree (organization_id, id);
+
+
+--
+-- Name: index_catalog_categories_on_organization_id_and_lower_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_categories_on_organization_id_and_lower_name ON public.catalog_categories USING btree (organization_id, lower((name)::text));
+
+
+--
+-- Name: index_catalog_products_on_category_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_catalog_products_on_category_id ON public.catalog_products USING btree (category_id);
+
+
+--
+-- Name: index_catalog_products_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_catalog_products_on_organization_id ON public.catalog_products USING btree (organization_id);
+
+
+--
+-- Name: index_catalog_products_on_organization_id_and_lower_sku; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_products_on_organization_id_and_lower_sku ON public.catalog_products USING btree (organization_id, lower((sku)::text));
+
+
+--
+-- Name: index_catalog_products_on_stock_unit_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_catalog_products_on_stock_unit_id ON public.catalog_products USING btree (stock_unit_id);
+
+
+--
+-- Name: index_catalog_unit_conversions_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_catalog_unit_conversions_on_organization_id ON public.catalog_unit_conversions USING btree (organization_id);
+
+
+--
+-- Name: index_catalog_unit_conversions_on_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_unit_conversions_on_product_id ON public.catalog_unit_conversions USING btree (product_id);
+
+
+--
+-- Name: index_catalog_unit_conversions_on_purchase_unit_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_catalog_unit_conversions_on_purchase_unit_id ON public.catalog_unit_conversions USING btree (purchase_unit_id);
+
+
+--
+-- Name: index_catalog_units_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_catalog_units_on_organization_id ON public.catalog_units USING btree (organization_id);
+
+
+--
+-- Name: index_catalog_units_on_organization_id_and_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_units_on_organization_id_and_code ON public.catalog_units USING btree (organization_id, code);
 
 
 --
@@ -1474,6 +1756,38 @@ CREATE TRIGGER audit_events_append_only BEFORE DELETE OR UPDATE ON public.audit_
 
 
 --
+-- Name: catalog_products fk_catalog_products_category_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_products
+    ADD CONSTRAINT fk_catalog_products_category_same_organization FOREIGN KEY (organization_id, category_id) REFERENCES public.catalog_categories(organization_id, id);
+
+
+--
+-- Name: catalog_products fk_rails_153251c57a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_products
+    ADD CONSTRAINT fk_rails_153251c57a FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
+-- Name: catalog_unit_conversions fk_rails_272b5ade05; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_unit_conversions
+    ADD CONSTRAINT fk_rails_272b5ade05 FOREIGN KEY (product_id) REFERENCES public.catalog_products(id);
+
+
+--
+-- Name: catalog_categories fk_rails_2ca6796229; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_categories
+    ADD CONSTRAINT fk_rails_2ca6796229 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: audit_events fk_rails_2e3720791c; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1530,6 +1844,22 @@ ALTER TABLE ONLY public.solid_queue_blocked_executions
 
 
 --
+-- Name: catalog_products fk_rails_603098440a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_products
+    ADD CONSTRAINT fk_rails_603098440a FOREIGN KEY (stock_unit_id) REFERENCES public.catalog_units(id);
+
+
+--
+-- Name: catalog_unit_conversions fk_rails_72bddd13cd; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_unit_conversions
+    ADD CONSTRAINT fk_rails_72bddd13cd FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: solid_queue_batch_executions fk_rails_7c5e073422; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1543,6 +1873,14 @@ ALTER TABLE ONLY public.solid_queue_batch_executions
 
 ALTER TABLE ONLY public.identity_sessions
     ADD CONSTRAINT fk_rails_7dd5dea022 FOREIGN KEY (user_id) REFERENCES public.identity_users(id);
+
+
+--
+-- Name: catalog_unit_conversions fk_rails_8081f8c4a5; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_unit_conversions
+    ADD CONSTRAINT fk_rails_8081f8c4a5 FOREIGN KEY (purchase_unit_id) REFERENCES public.catalog_units(id);
 
 
 --
@@ -1610,6 +1948,14 @@ ALTER TABLE ONLY public.solid_queue_scheduled_executions
 
 
 --
+-- Name: catalog_units fk_rails_fb5250d042; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_units
+    ADD CONSTRAINT fk_rails_fb5250d042 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: audit_events; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -1620,6 +1966,58 @@ ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY audit_events_tenant_isolation ON public.audit_events USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: catalog_categories; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.catalog_categories ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: catalog_categories catalog_categories_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY catalog_categories_tenant_isolation ON public.catalog_categories USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: catalog_products; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.catalog_products ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: catalog_products catalog_products_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY catalog_products_tenant_isolation ON public.catalog_products USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: catalog_unit_conversions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.catalog_unit_conversions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: catalog_unit_conversions catalog_unit_conversions_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY catalog_unit_conversions_tenant_isolation ON public.catalog_unit_conversions USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: catalog_units; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.catalog_units ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: catalog_units catalog_units_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY catalog_units_tenant_isolation ON public.catalog_units USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
 
 
 --
@@ -1642,6 +2040,10 @@ CREATE POLICY identity_invitations_tenant_isolation ON public.identity_invitatio
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260920130000'),
+('20260920120000'),
+('20260920110000'),
+('20260920100000'),
 ('20260919120000'),
 ('20260919110000'),
 ('20260919100000'),

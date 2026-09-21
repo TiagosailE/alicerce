@@ -7,6 +7,9 @@ Rails.application.routes.draw do
         resource :organization, only: :create, controller: "sessions/organizations"
       end
       resources :audit_events, only: :index
+      resources :units, only: %i[index show create update]
+      resources :categories, only: %i[index show create update]
+      resources :products, only: %i[index show create update]
       resources :invitations, only: %i[create index destroy]
       # The token is the credential; it travels in the body, never the URL
       # (a security review of the password reset routes below found that
