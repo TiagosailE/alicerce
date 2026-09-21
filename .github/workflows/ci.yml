@@ -89,6 +89,9 @@ jobs:
             -e DATABASE_URL=postgres://alicerce:alicerce@127.0.0.1:5432/alicerce_production \
             -e SECRET_KEY_BASE="$(openssl rand -hex 64)" \
             -e SEED_USER_PASSWORD="$seed_password" \
+            -e AR_ENCRYPTION_PRIMARY_KEY="$(openssl rand -hex 32)" \
+            -e AR_ENCRYPTION_DETERMINISTIC_KEY="$(openssl rand -hex 32)" \
+            -e AR_ENCRYPTION_KEY_DERIVATION_SALT="$(openssl rand -hex 32)" \
             -e APP_HOST=127.0.0.1 \
             -e WEB_CONCURRENCY=0 -e RAILS_MAX_THREADS=3 -e SOLID_QUEUE_IN_PUMA=1 -e JOB_THREADS=1 \
             alicerce:ci
