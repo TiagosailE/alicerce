@@ -27,5 +27,20 @@ module Identity
     def change_own_password?(user)
       user.present? && !user.demo?
     end
+
+    # ADR 0008 matrix, "Master data (partners, products, warehouses)":
+    # owner, admin and purchasing manage it; not demo-gated, unlike
+    # manage_members?, since demo visitors must see the full loop.
+    def manage_master_data?(membership)
+      return false unless membership
+
+      %w[owner admin purchasing].include?(membership.role)
+    end
+
+    # Every role can at least read master data (ADR 0008: sales, finance
+    # and read_only get "read").
+    def view_master_data?(membership)
+      membership.present?
+    end
   end
 end

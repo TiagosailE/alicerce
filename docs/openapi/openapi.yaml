@@ -95,6 +95,280 @@ paths:
         "403":
           $ref: "#/components/responses/Error"
 
+  /units:
+    get:
+      operationId: listUnits
+      summary: List the current organization's units of measure
+      description: Every role can read (ADR 0008); owner, admin and purchasing can also write.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          $ref: "#/components/responses/UnitListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createUnit
+      summary: Create a unit of measure
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUnitRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/UnitResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /units/{id}:
+    get:
+      operationId: showUnit
+      summary: Show a unit of measure
+      description: Every role can read (ADR 0008).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/UnitResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateUnit
+      summary: Update a unit of measure
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUnitRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/UnitResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /categories:
+    get:
+      operationId: listCategories
+      summary: List the current organization's product categories
+      description: Every role can read (ADR 0008); owner, admin and purchasing can also write.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          $ref: "#/components/responses/CategoryListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createCategory
+      summary: Create a product category
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/CategoryResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /categories/{id}:
+    get:
+      operationId: showCategory
+      summary: Show a product category
+      description: Every role can read (ADR 0008).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/CategoryResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateCategory
+      summary: Update a product category
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCategoryRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/CategoryResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /products:
+    get:
+      operationId: listProducts
+      summary: List the current organization's products
+      description: Every role can read (ADR 0008); owner, admin and purchasing can also write.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: category_id
+          in: query
+          schema: { type: integer }
+        - name: active
+          in: query
+          schema: { type: boolean }
+        - name: q
+          in: query
+          description: Case-insensitive search over name and sku.
+          schema: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/ProductListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createProduct
+      summary: Create a product
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/ProductResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /products/{id}:
+    get:
+      operationId: showProduct
+      summary: Show a product
+      description: Every role can read (ADR 0008).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/ProductResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateProduct
+      summary: Update a product
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/ProductResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
   /invitations:
     get:
       operationId: listInvitations
@@ -386,6 +660,42 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/PendingInvitationListResponseBody"
+    UnitResponse:
+      description: A unit of measure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnitResponseBody"
+    UnitListResponse:
+      description: A page of the current organization's units of measure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UnitListResponseBody"
+    CategoryResponse:
+      description: A product category.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CategoryResponseBody"
+    CategoryListResponse:
+      description: A page of the current organization's product categories.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CategoryListResponseBody"
+    ProductResponse:
+      description: A product.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProductResponseBody"
+    ProductListResponse:
+      description: A page of the current organization's products.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProductListResponseBody"
 
   schemas:
     User:
@@ -654,3 +964,172 @@ components:
       properties:
         current_password: { type: string }
         password: { type: string }
+
+    Unit:
+      type: object
+      additionalProperties: false
+      required: [ id, code, name, active ]
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+
+    UnitResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/Unit"
+
+    UnitListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Unit" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CreateUnitRequest:
+      type: object
+      additionalProperties: false
+      required: [ code, name ]
+      properties:
+        code: { type: string }
+        name: { type: string }
+
+    UpdateUnitRequest:
+      type: object
+      additionalProperties: false
+      required: [ code, name, active ]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+
+    Category:
+      type: object
+      additionalProperties: false
+      required: [ id, name, active ]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        active: { type: boolean }
+
+    CategoryResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/Category"
+
+    CategoryListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CreateCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [ name ]
+      properties:
+        name: { type: string }
+
+    UpdateCategoryRequest:
+      type: object
+      additionalProperties: false
+      required: [ name, active ]
+      properties:
+        name: { type: string }
+        active: { type: boolean }
+
+    UnitConversion:
+      type: object
+      additionalProperties: false
+      required: [ purchase_unit, factor ]
+      properties:
+        purchase_unit:
+          $ref: "#/components/schemas/Unit"
+        factor:
+          type: string
+          description: Decimal string, 6 places (ADR 0006). Stock quantity = purchase quantity x factor.
+
+    Product:
+      type: object
+      additionalProperties: false
+      required: [ id, sku, name, active, category, stock_unit, unit_conversion ]
+      properties:
+        id: { type: integer }
+        sku: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+        category:
+          nullable: true
+          allOf: [ { $ref: "#/components/schemas/Category" } ]
+        stock_unit:
+          $ref: "#/components/schemas/Unit"
+        unit_conversion:
+          $ref: "#/components/schemas/UnitConversion"
+
+    ProductResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/Product"
+
+    ProductListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CreateProductRequest:
+      type: object
+      additionalProperties: false
+      required: [ sku, name, stock_unit_id, purchase_unit_id, factor ]
+      properties:
+        sku: { type: string }
+        name: { type: string }
+        category_id:
+          type: integer
+          nullable: true
+        stock_unit_id: { type: integer }
+        purchase_unit_id: { type: integer }
+        factor:
+          type: string
+          description: Decimal string, up to 6 places (ADR 0006).
+
+    UpdateProductRequest:
+      type: object
+      additionalProperties: false
+      required: [ sku, name, stock_unit_id, purchase_unit_id, factor, active ]
+      properties:
+        sku: { type: string }
+        name: { type: string }
+        category_id:
+          type: integer
+          nullable: true
+        stock_unit_id: { type: integer }
+        purchase_unit_id: { type: integer }
+        factor:
+          type: string
+          description: Decimal string, up to 6 places (ADR 0006).
+        active: { type: boolean }
