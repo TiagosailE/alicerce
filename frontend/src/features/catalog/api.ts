@@ -5,6 +5,7 @@ import type { components } from "../../api/schema";
 export type Unit = components["schemas"]["Unit"];
 export type Category = components["schemas"]["Category"];
 export type Product = components["schemas"]["Product"];
+export type Partner = components["schemas"]["Partner"];
 
 export interface ProductFilters {
   categoryId?: number;
@@ -21,11 +22,31 @@ export interface ProductInput {
   factor: string;
 }
 
+export interface PartnerFilters {
+  customer?: boolean;
+  supplier?: boolean;
+  active?: boolean;
+  q?: string;
+}
+
+export interface PartnerInput {
+  name: string;
+  documentType: "cpf" | "cnpj";
+  documentNumber: string;
+  customer: boolean;
+  supplier: boolean;
+  email: string;
+  phone: string;
+}
+
 const unitsKey = ["catalog", "units"] as const;
 const categoriesKey = ["catalog", "categories"] as const;
 const productsKey = (page: number, filters: ProductFilters) =>
   ["catalog", "products", { page, ...filters }] as const;
 const productKey = (id: number) => ["catalog", "product", id] as const;
+const partnersKey = (page: number, filters: PartnerFilters) =>
+  ["catalog", "partners", { page, ...filters }] as const;
+const partnerKey = (id: number) => ["catalog", "partner", id] as const;
 
 function requestBody(input: ProductInput) {
   return {
@@ -115,6 +136,81 @@ export function useUpdateProduct() {
     onSuccess: (product: Product) => {
       queryClient.setQueryData(productKey(product.id), product);
       void queryClient.invalidateQueries({ queryKey: ["catalog", "products"] });
+    },
+  });
+}
+
+function partnerRequestBody(input: PartnerInput) {
+  return {
+    name: input.name,
+    document_type: input.documentType,
+    document_number: input.documentNumber,
+    customer: input.customer,
+    supplier: input.supplier,
+    email: input.email.trim() || undefined,
+    phone: input.phone.trim() || undefined,
+  };
+}
+
+export function usePartners(page: number, filters: PartnerFilters = {}) {
+  return useQuery({
+    queryKey: partnersKey(page, filters),
+    queryFn: async () =>
+      unwrapList<Partner>(
+        await api.GET("/partners", {
+          params: {
+            query: {
+              page,
+              customer: filters.customer,
+              supplier: filters.supplier,
+              active: filters.active,
+              q: filters.q,
+            },
+          },
+        }),
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function usePartner(id: number) {
+  return useQuery({
+    queryKey: partnerKey(id),
+    queryFn: async () => unwrap(await api.GET("/partners/{id}", { params: { path: { id } } })),
+  });
+}
+
+export function useCreatePartner() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: PartnerInput) =>
+      unwrap(
+        await api.POST("/partners", {
+          body: partnerRequestBody(input),
+          params: { header: csrfHeader() },
+        }),
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["catalog", "partners"] });
+    },
+  });
+}
+
+export function useUpdatePartner() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, active, ...input }: PartnerInput & { id: number; active: boolean }) =>
+      unwrap(
+        await api.PATCH("/partners/{id}", {
+          params: { path: { id }, header: csrfHeader() },
+          body: { ...partnerRequestBody(input), active },
+        }),
+      ),
+    onSuccess: (partner: Partner) => {
+      queryClient.setQueryData(partnerKey(partner.id), partner);
+      void queryClient.invalidateQueries({ queryKey: ["catalog", "partners"] });
     },
   });
 }

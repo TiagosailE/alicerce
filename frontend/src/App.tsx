@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/shell/AppShell";
 import { Spinner } from "./components/ui/Spinner";
+import { PartnerDetailScreen } from "./features/catalog/PartnerDetailScreen";
+import { PartnersScreen } from "./features/catalog/PartnersScreen";
 import { ProductDetailScreen } from "./features/catalog/ProductDetailScreen";
 import { ProductsScreen } from "./features/catalog/ProductsScreen";
 import { HomeScreen } from "./features/home/HomeScreen";
@@ -106,6 +108,14 @@ export function App() {
                 <Route
                   path="/estoque/depositos"
                   element={<WarehousesScreen canManage={canManageMasterData} />}
+                />
+                <Route
+                  path="/parceiros"
+                  element={<PartnersScreen canManage={canManageMasterData} />}
+                />
+                <Route
+                  path="/parceiros/:id"
+                  element={<PartnerDetailScreen canManage={canManageMasterData} />}
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
