@@ -29,8 +29,16 @@ export function AppShell({
           {t("app.name")}
         </div>
         <span className="ml-2 truncate text-sm font-medium text-text">{organizationName}</span>
-        {canManageMembers && (
-          <nav className="ml-4 flex items-center gap-3 text-sm">
+        <nav className="ml-4 flex items-center gap-3 text-sm">
+          <NavLink
+            to="/estoque/produtos"
+            className={({ isActive }) =>
+              `rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
+            }
+          >
+            {t("shell.navProducts")}
+          </NavLink>
+          {canManageMembers && (
             <NavLink
               to="/membros"
               className={({ isActive }) =>
@@ -39,8 +47,8 @@ export function AppShell({
             >
               {t("shell.navMembers")}
             </NavLink>
-          </nav>
-        )}
+          )}
+        </nav>
         <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />
           <div className="flex items-center gap-2 text-sm text-text">

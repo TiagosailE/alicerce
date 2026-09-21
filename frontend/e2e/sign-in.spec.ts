@@ -25,6 +25,13 @@ test("signs in as a seeded demo user, lands on the app shell, then signs out", a
   // 0008): the nav link must not even appear, not just be blocked server side.
   await expect(page.getByRole("link", { name: "Membros" })).not.toBeVisible();
 
+  // Unlike member management, master data is not demo-gated (ADR 0008): a
+  // demo owner can still see and manage the seeded catalog.
+  await page.getByRole("link", { name: "Produtos" }).click();
+  await expect(page.getByRole("heading", { name: "Produtos" })).toBeVisible();
+  await expect(page.getByText("TIJ-001")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Novo produto" })).toBeVisible();
+
   await page.getByRole("button", { name: "Sair" }).click();
 
   await expect(page.getByRole("heading", { name: "Entrar" })).toBeVisible();
