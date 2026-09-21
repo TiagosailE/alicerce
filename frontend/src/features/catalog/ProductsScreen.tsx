@@ -4,23 +4,12 @@ import { Button } from "../../components/ui/Button";
 import { PaginationControls } from "../../components/ui/PaginationControls";
 import { SectionError } from "../../components/ui/SectionError";
 import { SectionLoading } from "../../components/ui/SectionLoading";
+import { StatusBadge } from "../../components/ui/StatusBadge";
 import { StatusMessage, useActionStatus } from "../../components/ui/StatusMessage";
 import { formatQuantity } from "../../lib/format";
 import { t } from "../../i18n";
 import { useCategories, useCreateProduct, useProducts, useUnits } from "./api";
 import { ProductForm } from "./ProductForm";
-
-function StatusBadge({ active }: { active: boolean }) {
-  return (
-    <span
-      className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-        active ? "bg-success/15 text-success" : "bg-text-muted/15 text-text-muted"
-      }`}
-    >
-      {active ? t("products.statusActive") : t("products.statusInactive")}
-    </span>
-  );
-}
 
 export function ProductsScreen({ canManage }: { canManage: boolean }) {
   const [page, setPage] = useState(1);

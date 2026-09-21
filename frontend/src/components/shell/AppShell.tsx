@@ -24,32 +24,46 @@ export function AppShell({
   return (
     <div className="flex min-h-screen flex-col bg-surface">
       <header className="flex h-12 items-center gap-3 border-b border-border-subtle bg-surface-raised px-4">
-        <div className="flex items-center gap-2 font-display text-text">
+        <div className="flex shrink-0 items-center gap-2 font-display text-text">
           <BrandMark />
           {t("app.name")}
         </div>
-        <span className="ml-2 truncate text-sm font-medium text-text">{organizationName}</span>
-        <nav className="ml-4 flex items-center gap-3 text-sm">
+        <span className="ml-2 min-w-0 truncate text-sm font-medium text-text">
+          {organizationName}
+        </span>
+        {/* min-w-0 lets this shrink below its content width inside the flex
+            row (a flex item's default min-width is auto, not 0); without it,
+            three nav links plus a long organization name could push the
+            sign-out button off screen with no way to reach it. */}
+        <nav className="ml-4 flex min-w-0 items-center gap-3 overflow-x-auto text-sm">
           <NavLink
             to="/estoque/produtos"
             className={({ isActive }) =>
-              `rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
+              `shrink-0 rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
             }
           >
             {t("shell.navProducts")}
+          </NavLink>
+          <NavLink
+            to="/estoque/depositos"
+            className={({ isActive }) =>
+              `shrink-0 rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
+            }
+          >
+            {t("shell.navWarehouses")}
           </NavLink>
           {canManageMembers && (
             <NavLink
               to="/membros"
               className={({ isActive }) =>
-                `rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
+                `shrink-0 rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
               }
             >
               {t("shell.navMembers")}
             </NavLink>
           )}
         </nav>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex shrink-0 items-center gap-3">
           <ThemeToggle />
           <div className="flex items-center gap-2 text-sm text-text">
             <span

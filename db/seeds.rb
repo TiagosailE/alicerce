@@ -30,14 +30,20 @@ seed_member(canion, email: "marcia.alves@canion.example", name: "Márcia Alves",
 
 seed_member(serra, email: "pedro.rocha@serradourada.example", name: "Pedro Rocha", role: "owner", password:)
 
-# Catalog (slice 2): TenantScoped models need Current.organization set before
-# any query, including find_or_create_by!'s own lookup.
+# Master data (slice 2): TenantScoped models need Current.organization set
+# before any query, including find_or_create_by!'s own lookup. Warehouses
+# live under Inventory:: (glossary), not Catalog::, even though they are
+# seeded here alongside it.
 def seed_unit(organization, code:, name:)
   Catalog::Unit.find_or_create_by!(organization:, code:) { |unit| unit.name = name }
 end
 
 def seed_category(organization, name:)
   Catalog::Category.find_or_create_by!(organization:, name:)
+end
+
+def seed_warehouse(organization, name:)
+  Inventory::Warehouse.find_or_create_by!(organization:, name:)
 end
 
 def seed_product(organization, sku:, name:, stock_unit:, purchase_unit:, factor:, category: nil)
@@ -70,6 +76,9 @@ seed_product(canion, sku: "VER-001", name: "Vergalhão CA-50 8mm (barra 12m)",
   stock_unit: unidade, purchase_unit: barra, factor: 1, category: ferragens_categoria)
 seed_product(canion, sku: "TIJ-001", name: "Tijolo comum 8 furos",
   stock_unit: unidade, purchase_unit: milheiro, factor: 1000, category: alvenaria_categoria)
+
+seed_warehouse(canion, name: "Loja")
+seed_warehouse(canion, name: "Pátio")
 Current.organization = nil
 
 Current.organization = serra
@@ -78,6 +87,7 @@ serra_caixa = seed_unit(serra, code: "CX", name: "Caixa")
 serra_categoria = seed_category(serra, name: "Ferragens")
 seed_product(serra, sku: "DOB-001", name: "Dobradiça 3\" cromada",
   stock_unit: serra_unidade, purchase_unit: serra_caixa, factor: 12, category: serra_categoria)
+seed_warehouse(serra, name: "Depósito")
 Current.organization = nil
 
 puts "Seeded #{Identity::Organization.count} organizations and #{Identity::User.count} users."

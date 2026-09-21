@@ -207,6 +207,54 @@ export interface paths {
         patch: operations["updateProduct"];
         trace?: never;
     };
+    "/warehouses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's warehouses
+         * @description Every role can read (ADR 0008); owner, admin and purchasing can also write.
+         */
+        get: operations["listWarehouses"];
+        put?: never;
+        /**
+         * Create a warehouse
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        post: operations["createWarehouse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/warehouses/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a warehouse
+         * @description Every role can read (ADR 0008).
+         */
+        get: operations["showWarehouse"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a warehouse
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        patch: operations["updateWarehouse"];
+        trace?: never;
+    };
     "/invitations": {
         parameters: {
             query?: never;
@@ -599,6 +647,25 @@ export interface components {
             factor: string;
             active: boolean;
         };
+        Warehouse: {
+            id: number;
+            name: string;
+            active: boolean;
+        };
+        WarehouseResponseBody: {
+            data: components["schemas"]["Warehouse"];
+        };
+        WarehouseListResponseBody: {
+            data: components["schemas"]["Warehouse"][];
+            meta: components["schemas"]["Meta"];
+        };
+        CreateWarehouseRequest: {
+            name: string;
+        };
+        UpdateWarehouseRequest: {
+            name: string;
+            active: boolean;
+        };
     };
     responses: {
         /** @description The current session, if any, and a CSRF token. */
@@ -716,6 +783,24 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["ProductListResponseBody"];
+            };
+        };
+        /** @description A warehouse. */
+        WarehouseResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["WarehouseResponseBody"];
+            };
+        };
+        /** @description A page of the current organization's warehouses. */
+        WarehouseListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["WarehouseListResponseBody"];
             };
         };
     };
@@ -1060,6 +1145,87 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["ProductResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    listWarehouses: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["WarehouseListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createWarehouse: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWarehouseRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["WarehouseResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    showWarehouse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["WarehouseResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateWarehouse: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWarehouseRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["WarehouseResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
