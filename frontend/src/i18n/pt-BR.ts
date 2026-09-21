@@ -9,6 +9,9 @@ export const ptBR = {
   "app.pagePrefix": "Página ",
   "app.pageSeparator": " de ",
 
+  "common.statusActive": "Ativo",
+  "common.statusInactive": "Inativo",
+
   "role.owner": "Dono(a)",
   "role.admin": "Administrador(a)",
   "role.purchasing": "Compras",
@@ -33,6 +36,7 @@ export const ptBR = {
   "shell.toggleThemeToDark": "Mudar para tema escuro",
   "shell.navMembers": "Membros",
   "shell.navProducts": "Produtos",
+  "shell.navWarehouses": "Depósitos",
 
   "home.welcomePrefix": "Bem-vindo(a),",
 
@@ -99,8 +103,6 @@ export const ptBR = {
   "products.tableUnit": "Unidade",
   "products.tableConversion": "Conversão",
   "products.tableStatus": "Status",
-  "products.statusActive": "Ativo",
-  "products.statusInactive": "Inativo",
   "products.noCategory": "Sem categoria",
   "products.empty": "Nenhum produto encontrado.",
 
@@ -152,4 +154,32 @@ export const ptBR = {
   "products.updateSuccess": "Produto atualizado.",
   "products.updateGenericError": "Não foi possível atualizar o produto. Tente novamente.",
   "products.updateValidationError": "Verifique os campos do produto.",
+
+  "warehouses.title": "Depósitos",
+  "warehouses.loading": "Carregando depósitos…",
+  "warehouses.loadError": "Não foi possível carregar os depósitos.",
+  "warehouses.empty": "Nenhum depósito encontrado.",
+  "warehouses.tableName": "Nome",
+  "warehouses.tableStatus": "Status",
+  "warehouses.tableActions": "Ações",
+
+  "warehouses.newButton": "Novo depósito",
+  "warehouses.createFormTitle": "Novo depósito",
+  "warehouses.nameLabel": "Nome",
+  "warehouses.activeLabel": "Ativo",
+  "warehouses.saveButton": "Salvar",
+  "warehouses.savingButton": "Salvando…",
+  "warehouses.cancelButton": "Cancelar",
+  "warehouses.editButton": "Editar",
+  "warehouses.editingPrefix": "Editando depósito: ",
+
+  "warehouses.createSuccess": "Depósito criado.",
+  "warehouses.createGenericError": "Não foi possível criar o depósito. Tente novamente.",
+  "warehouses.createValidationError": "Verifique os campos do depósito.",
+  "warehouses.updateSuccess": "Depósito atualizado.",
+  "warehouses.updateGenericError": "Não foi possível atualizar o depósito. Tente novamente.",
+  "warehouses.updateValidationError": "Verifique os campos do depósito.",
+  "warehouses.fieldErrorNameBlank": "Informe o nome.",
+  "warehouses.fieldErrorNameTaken": "Já existe um depósito com esse nome.",
+  "warehouses.fieldErrorGeneric": "Verifique este campo.",
 } as const;

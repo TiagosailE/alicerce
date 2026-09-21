@@ -6,6 +6,7 @@ import { ProductsScreen } from "./features/catalog/ProductsScreen";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { useSession } from "./features/identity/api";
 import { MembersScreen } from "./features/identity/MembersScreen";
+import { WarehousesScreen } from "./features/inventory/WarehousesScreen";
 import { SignInScreen } from "./features/identity/SignInScreen";
 import { t } from "./i18n";
 
@@ -101,6 +102,10 @@ export function App() {
                 <Route
                   path="/estoque/produtos/:id"
                   element={<ProductDetailScreen canManage={canManageMasterData} />}
+                />
+                <Route
+                  path="/estoque/depositos"
+                  element={<WarehousesScreen canManage={canManageMasterData} />}
                 />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

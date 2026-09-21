@@ -369,6 +369,94 @@ paths:
         "422":
           $ref: "#/components/responses/Error"
 
+  /warehouses:
+    get:
+      operationId: listWarehouses
+      summary: List the current organization's warehouses
+      description: Every role can read (ADR 0008); owner, admin and purchasing can also write.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          $ref: "#/components/responses/WarehouseListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createWarehouse
+      summary: Create a warehouse
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWarehouseRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/WarehouseResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /warehouses/{id}:
+    get:
+      operationId: showWarehouse
+      summary: Show a warehouse
+      description: Every role can read (ADR 0008).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/WarehouseResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateWarehouse
+      summary: Update a warehouse
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWarehouseRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/WarehouseResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
   /invitations:
     get:
       operationId: listInvitations
@@ -696,6 +784,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ProductListResponseBody"
+    WarehouseResponse:
+      description: A warehouse.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/WarehouseResponseBody"
+    WarehouseListResponse:
+      description: A page of the current organization's warehouses.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/WarehouseListResponseBody"
 
   schemas:
     User:
@@ -1132,4 +1232,47 @@ components:
         factor:
           type: string
           description: Decimal string, up to 6 places (ADR 0006).
+        active: { type: boolean }
+
+    Warehouse:
+      type: object
+      additionalProperties: false
+      required: [ id, name, active ]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        active: { type: boolean }
+
+    WarehouseResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/Warehouse"
+
+    WarehouseListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Warehouse" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CreateWarehouseRequest:
+      type: object
+      additionalProperties: false
+      required: [ name ]
+      properties:
+        name: { type: string }
+
+    UpdateWarehouseRequest:
+      type: object
+      additionalProperties: false
+      required: [ name, active ]
+      properties:
+        name: { type: string }
         active: { type: boolean }

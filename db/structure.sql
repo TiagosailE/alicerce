@@ -286,7 +286,7 @@ CREATE TABLE public.identity_invitations (
     accepted_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT identity_invitations_role_valid CHECK (((role)::text = ANY ((ARRAY['owner'::character varying, 'admin'::character varying, 'purchasing'::character varying, 'sales'::character varying, 'finance'::character varying, 'read_only'::character varying])::text[])))
+    CONSTRAINT identity_invitations_role_valid CHECK (((role)::text = ANY (ARRAY[('owner'::character varying)::text, ('admin'::character varying)::text, ('purchasing'::character varying)::text, ('sales'::character varying)::text, ('finance'::character varying)::text, ('read_only'::character varying)::text])))
 );
 
 
@@ -444,6 +444,39 @@ CREATE SEQUENCE public.identity_users_id_seq
 --
 
 ALTER SEQUENCE public.identity_users_id_seq OWNED BY public.identity_users.id;
+
+
+--
+-- Name: inventory_warehouses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_warehouses (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    name character varying NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: inventory_warehouses_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.inventory_warehouses_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: inventory_warehouses_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.inventory_warehouses_id_seq OWNED BY public.inventory_warehouses.id;
 
 
 --
@@ -1002,6 +1035,13 @@ ALTER TABLE ONLY public.identity_users ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
+-- Name: inventory_warehouses id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_warehouses ALTER COLUMN id SET DEFAULT nextval('public.inventory_warehouses_id_seq'::regclass);
+
+
+--
 -- Name: solid_cache_entries id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1185,6 +1225,14 @@ ALTER TABLE ONLY public.identity_sessions
 
 ALTER TABLE ONLY public.identity_users
     ADD CONSTRAINT identity_users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: inventory_warehouses inventory_warehouses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_warehouses
+    ADD CONSTRAINT inventory_warehouses_pkey PRIMARY KEY (id);
 
 
 --
@@ -1501,6 +1549,27 @@ CREATE INDEX index_identity_sessions_on_user_id ON public.identity_sessions USIN
 --
 
 CREATE UNIQUE INDEX index_identity_users_on_lower_email ON public.identity_users USING btree (lower((email)::text));
+
+
+--
+-- Name: index_inventory_warehouses_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_warehouses_on_organization_id ON public.inventory_warehouses USING btree (organization_id);
+
+
+--
+-- Name: index_inventory_warehouses_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_inventory_warehouses_on_organization_id_and_id ON public.inventory_warehouses USING btree (organization_id, id);
+
+
+--
+-- Name: index_inventory_warehouses_on_organization_id_and_lower_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_inventory_warehouses_on_organization_id_and_lower_name ON public.inventory_warehouses USING btree (organization_id, lower((name)::text));
 
 
 --
@@ -1948,6 +2017,14 @@ ALTER TABLE ONLY public.solid_queue_scheduled_executions
 
 
 --
+-- Name: inventory_warehouses fk_rails_df87fc6a51; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_warehouses
+    ADD CONSTRAINT fk_rails_df87fc6a51 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: catalog_units fk_rails_fb5250d042; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2034,12 +2111,26 @@ CREATE POLICY identity_invitations_tenant_isolation ON public.identity_invitatio
 
 
 --
+-- Name: inventory_warehouses; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_warehouses ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: inventory_warehouses inventory_warehouses_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehouses USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260921100000'),
 ('20260920130000'),
 ('20260920120000'),
 ('20260920110000'),

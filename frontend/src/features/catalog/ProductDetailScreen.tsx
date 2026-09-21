@@ -109,9 +109,7 @@ export function ProductDetailScreen({ canManage }: { canManage: boolean }) {
               />
               <ReadOnlyField
                 label={t("products.activeLabel")}
-                value={
-                  product.data.active ? t("products.statusActive") : t("products.statusInactive")
-                }
+                value={product.data.active ? t("common.statusActive") : t("common.statusInactive")}
               />
             </dl>
           ) : null}
