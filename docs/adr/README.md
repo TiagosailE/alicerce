@@ -16,5 +16,6 @@ Decisions that are hard to reverse, cross modules or change the security posture
 | [0010](0010-audit-trail.md) | Append-only audit trail written by commands, purged only through owner functions | accepted |
 | [0011](0011-openapi-schema-first.md) | Schema-first OpenAPI, validated in request specs, typed client generated for the SPA | accepted |
 | [0012](0012-personal-data-encryption.md) | Active Record Encryption for document numbers, keys from the environment | accepted |
+| [0013](0013-sales-quotes-as-separate-document.md) | Sales quotes (orcamentos) are a separate document, not the sales order's draft state | accepted |
 
 Related: [architecture](../architecture.md), [threat model](../threat-model.md), [security checklist](../security.md), [scope](../scope.md), [deploy](../deploy.md).
