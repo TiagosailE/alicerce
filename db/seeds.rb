@@ -46,6 +46,20 @@ def seed_warehouse(organization, name:)
   Inventory::Warehouse.find_or_create_by!(organization:, name:)
 end
 
+# document_number is generated and fictitious (docs/scope.md: never a real
+# CPF or CNPJ in seeds), but still check-digit valid, produced the same way
+# a spec would (DocumentNumberGenerator, lib/).
+def seed_partner(organization, name:, document_type:, document_number:, customer: false, supplier: false, email: nil, phone: nil)
+  Catalog::Partner.find_or_create_by!(organization:, document_number:) do |partner|
+    partner.name = name
+    partner.document_type = document_type
+    partner.customer = customer
+    partner.supplier = supplier
+    partner.email = email
+    partner.phone = phone
+  end
+end
+
 def seed_product(organization, sku:, name:, stock_unit:, purchase_unit:, factor:, category: nil)
   product = Catalog::Product.find_or_create_by!(organization:, sku:) do |p|
     p.name = name
@@ -79,6 +93,15 @@ seed_product(canion, sku: "TIJ-001", name: "Tijolo comum 8 furos",
 
 seed_warehouse(canion, name: "Loja")
 seed_warehouse(canion, name: "Pátio")
+
+# Fictitious, check-digit-valid documents (docs/scope.md), generated once
+# with DocumentNumberGenerator and hardcoded so db:seed stays idempotent;
+# the alphanumeric CNPJ (ADR 0012) shows up here, the numeric one below for
+# Ferragens Serra Dourada, so both coexisting formats appear in the demo.
+seed_partner(canion, name: "Cimentos Bahia Distribuidora Ltda", document_type: "cnpj", document_number: "NXKE3INSKJRI36",
+  supplier: true, email: "vendas@cimentosbahia.example", phone: "+55 71 3333-1000")
+seed_partner(canion, name: "Marcos Pereira", document_type: "cpf", document_number: "32993565770",
+  customer: true, email: "marcos.pereira@example.com", phone: "+55 71 99999-2000")
 Current.organization = nil
 
 Current.organization = serra
@@ -88,6 +111,11 @@ serra_categoria = seed_category(serra, name: "Ferragens")
 seed_product(serra, sku: "DOB-001", name: "Dobradiça 3\" cromada",
   stock_unit: serra_unidade, purchase_unit: serra_caixa, factor: 12, category: serra_categoria)
 seed_warehouse(serra, name: "Depósito")
+
+seed_partner(serra, name: "Metalúrgica Dourada Ltda", document_type: "cnpj", document_number: "38129140898710",
+  supplier: true, email: "vendas@metalurgicadourada.example", phone: "+55 11 3333-4000")
+seed_partner(serra, name: "Ana Beatriz Ferreira", document_type: "cpf", document_number: "24098784076",
+  customer: true, email: "ana.ferreira@example.com", phone: "+55 11 99999-5000")
 Current.organization = nil
 
 puts "Seeded #{Identity::Organization.count} organizations and #{Identity::User.count} users."

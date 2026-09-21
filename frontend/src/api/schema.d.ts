@@ -255,6 +255,54 @@ export interface paths {
         patch: operations["updateWarehouse"];
         trace?: never;
     };
+    "/partners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the current organization's partners
+         * @description Every role can read (ADR 0008); owner, admin and purchasing can also write.
+         */
+        get: operations["listPartners"];
+        put?: never;
+        /**
+         * Create a partner
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        post: operations["createPartner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/partners/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a partner
+         * @description Every role can read (ADR 0008).
+         */
+        get: operations["showPartner"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a partner
+         * @description Owner, admin and purchasing only (ADR 0008).
+         */
+        patch: operations["updatePartner"];
+        trace?: never;
+    };
     "/invitations": {
         parameters: {
             query?: never;
@@ -666,6 +714,47 @@ export interface components {
             name: string;
             active: boolean;
         };
+        Partner: {
+            id: number;
+            name: string;
+            /** @enum {string} */
+            document_type: "cpf" | "cnpj";
+            /** @description Digits only for a CPF; digits and upper-case letters for a CNPJ (ADR 0012, alphanumeric since July 2026). No punctuation. */
+            document_number: string;
+            customer: boolean;
+            supplier: boolean;
+            email: string | null;
+            phone: string | null;
+            active: boolean;
+        };
+        PartnerResponseBody: {
+            data: components["schemas"]["Partner"];
+        };
+        PartnerListResponseBody: {
+            data: components["schemas"]["Partner"][];
+            meta: components["schemas"]["Meta"];
+        };
+        CreatePartnerRequest: {
+            name: string;
+            /** @enum {string} */
+            document_type: "cpf" | "cnpj";
+            document_number: string;
+            customer: boolean;
+            supplier: boolean;
+            email?: string;
+            phone?: string;
+        };
+        UpdatePartnerRequest: {
+            name: string;
+            /** @enum {string} */
+            document_type: "cpf" | "cnpj";
+            document_number: string;
+            customer: boolean;
+            supplier: boolean;
+            email?: string;
+            phone?: string;
+            active: boolean;
+        };
     };
     responses: {
         /** @description The current session, if any, and a CSRF token. */
@@ -801,6 +890,24 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["WarehouseListResponseBody"];
+            };
+        };
+        /** @description A partner. */
+        PartnerResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PartnerResponseBody"];
+            };
+        };
+        /** @description A page of the current organization's partners. */
+        PartnerListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PartnerListResponseBody"];
             };
         };
     };
@@ -1226,6 +1333,92 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["WarehouseResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    listPartners: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                customer?: boolean;
+                supplier?: boolean;
+                active?: boolean;
+                /** @description Case-insensitive search over name. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PartnerListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createPartner: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePartnerRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["PartnerResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    showPartner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PartnerResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updatePartner: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePartnerRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["PartnerResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];

@@ -16,6 +16,15 @@ services:
         generateValue: true
       - key: SEED_USER_PASSWORD
         sync: false
+      # Active Record Encryption (ADR 0012): pure random secrets, no
+      # external registration needed, so Render can generate them the same
+      # way it generates SECRET_KEY_BASE.
+      - key: AR_ENCRYPTION_PRIMARY_KEY
+        generateValue: true
+      - key: AR_ENCRYPTION_DETERMINISTIC_KEY
+        generateValue: true
+      - key: AR_ENCRYPTION_KEY_DERIVATION_SALT
+        generateValue: true
       # Render injects WEB_CONCURRENCY=1, which forks a Puma worker and doubles memory on a 512 MB instance.
       - key: WEB_CONCURRENCY
         value: "0"

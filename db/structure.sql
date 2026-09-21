@@ -166,6 +166,45 @@ ALTER SEQUENCE public.catalog_categories_id_seq OWNED BY public.catalog_categori
 
 
 --
+-- Name: catalog_partners; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.catalog_partners (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    name character varying NOT NULL,
+    document_type character varying NOT NULL,
+    document_number character varying NOT NULL,
+    customer boolean DEFAULT false NOT NULL,
+    supplier boolean DEFAULT false NOT NULL,
+    email character varying,
+    phone character varying,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: catalog_partners_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.catalog_partners_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: catalog_partners_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.catalog_partners_id_seq OWNED BY public.catalog_partners.id;
+
+
+--
 -- Name: catalog_products; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -286,7 +325,7 @@ CREATE TABLE public.identity_invitations (
     accepted_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT identity_invitations_role_valid CHECK (((role)::text = ANY (ARRAY[('owner'::character varying)::text, ('admin'::character varying)::text, ('purchasing'::character varying)::text, ('sales'::character varying)::text, ('finance'::character varying)::text, ('read_only'::character varying)::text])))
+    CONSTRAINT identity_invitations_role_valid CHECK (((role)::text = ANY ((ARRAY['owner'::character varying, 'admin'::character varying, 'purchasing'::character varying, 'sales'::character varying, 'finance'::character varying, 'read_only'::character varying])::text[])))
 );
 
 
@@ -979,6 +1018,13 @@ ALTER TABLE ONLY public.catalog_categories ALTER COLUMN id SET DEFAULT nextval('
 
 
 --
+-- Name: catalog_partners id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_partners ALTER COLUMN id SET DEFAULT nextval('public.catalog_partners_id_seq'::regclass);
+
+
+--
 -- Name: catalog_products id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1161,6 +1207,14 @@ ALTER TABLE ONLY public.audit_events
 
 ALTER TABLE ONLY public.catalog_categories
     ADD CONSTRAINT catalog_categories_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: catalog_partners catalog_partners_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_partners
+    ADD CONSTRAINT catalog_partners_pkey PRIMARY KEY (id);
 
 
 --
@@ -1402,6 +1456,27 @@ CREATE UNIQUE INDEX index_catalog_categories_on_organization_id_and_id ON public
 --
 
 CREATE UNIQUE INDEX index_catalog_categories_on_organization_id_and_lower_name ON public.catalog_categories USING btree (organization_id, lower((name)::text));
+
+
+--
+-- Name: index_catalog_partners_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_catalog_partners_on_organization_id ON public.catalog_partners USING btree (organization_id);
+
+
+--
+-- Name: index_catalog_partners_on_organization_id_and_document_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_partners_on_organization_id_and_document_number ON public.catalog_partners USING btree (organization_id, document_number);
+
+
+--
+-- Name: index_catalog_partners_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_partners_on_organization_id_and_id ON public.catalog_partners USING btree (organization_id, id);
 
 
 --
@@ -2025,6 +2100,14 @@ ALTER TABLE ONLY public.inventory_warehouses
 
 
 --
+-- Name: catalog_partners fk_rails_f241d52c95; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_partners
+    ADD CONSTRAINT fk_rails_f241d52c95 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: catalog_units fk_rails_fb5250d042; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2056,6 +2139,19 @@ ALTER TABLE public.catalog_categories ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY catalog_categories_tenant_isolation ON public.catalog_categories USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: catalog_partners; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.catalog_partners ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: catalog_partners catalog_partners_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY catalog_partners_tenant_isolation ON public.catalog_partners USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
 
 
 --
@@ -2130,6 +2226,7 @@ CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehous
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260921110000'),
 ('20260921100000'),
 ('20260920130000'),
 ('20260920120000'),

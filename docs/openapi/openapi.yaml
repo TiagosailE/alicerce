@@ -457,6 +457,107 @@ paths:
         "422":
           $ref: "#/components/responses/Error"
 
+  /partners:
+    get:
+      operationId: listPartners
+      summary: List the current organization's partners
+      description: Every role can read (ADR 0008); owner, admin and purchasing can also write.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: customer
+          in: query
+          schema: { type: boolean }
+        - name: supplier
+          in: query
+          schema: { type: boolean }
+        - name: active
+          in: query
+          schema: { type: boolean }
+        - name: q
+          in: query
+          description: Case-insensitive search over name.
+          schema: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/PartnerListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createPartner
+      summary: Create a partner
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePartnerRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/PartnerResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /partners/{id}:
+    get:
+      operationId: showPartner
+      summary: Show a partner
+      description: Every role can read (ADR 0008).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/PartnerResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updatePartner
+      summary: Update a partner
+      description: Owner, admin and purchasing only (ADR 0008).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePartnerRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/PartnerResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
   /invitations:
     get:
       operationId: listInvitations
@@ -796,6 +897,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/WarehouseListResponseBody"
+    PartnerResponse:
+      description: A partner.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PartnerResponseBody"
+    PartnerListResponse:
+      description: A page of the current organization's partners.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PartnerListResponseBody"
 
   schemas:
     User:
@@ -1275,4 +1388,79 @@ components:
       required: [ name, active ]
       properties:
         name: { type: string }
+        active: { type: boolean }
+
+    Partner:
+      type: object
+      additionalProperties: false
+      required: [ id, name, document_type, document_number, customer, supplier, email, phone, active ]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        document_type:
+          type: string
+          enum: [ cpf, cnpj ]
+        document_number:
+          type: string
+          description: >
+            Digits only for a CPF; digits and upper-case letters for a CNPJ
+            (ADR 0012, alphanumeric since July 2026). No punctuation.
+        customer: { type: boolean }
+        supplier: { type: boolean }
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        active: { type: boolean }
+
+    PartnerResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/Partner"
+
+    PartnerListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Partner" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CreatePartnerRequest:
+      type: object
+      additionalProperties: false
+      required: [ name, document_type, document_number, customer, supplier ]
+      properties:
+        name: { type: string }
+        document_type:
+          type: string
+          enum: [ cpf, cnpj ]
+        document_number: { type: string }
+        customer: { type: boolean }
+        supplier: { type: boolean }
+        email: { type: string }
+        phone: { type: string }
+
+    UpdatePartnerRequest:
+      type: object
+      additionalProperties: false
+      required: [ name, document_type, document_number, customer, supplier, active ]
+      properties:
+        name: { type: string }
+        document_type:
+          type: string
+          enum: [ cpf, cnpj ]
+        document_number: { type: string }
+        customer: { type: boolean }
+        supplier: { type: boolean }
+        email: { type: string }
+        phone: { type: string }
         active: { type: boolean }
