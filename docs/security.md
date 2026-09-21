@@ -9,7 +9,7 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | Control | Status | Evidence |
 |---|---|---|
 | `organization_id` on every tenant table, scope fails closed without a current organization | in place | ADR 0003, `TenantScoped`, `Audit::Event` (the first table to use it) |
-| Postgres RLS on business tables, audit, idempotency keys and invitations, policies on `app.organization_id` (null when unset or reset), app role without `BYPASSRLS` | in place for `audit_events`, `identity_invitations` and the slice 2 catalog tables (`catalog_units`, `catalog_categories`, `catalog_products`, `catalog_unit_conversions`), designed for the rest | ADR 0003, `docs/deploy.md`, `db/migrate/20260919110000_create_audit_events.rb`, `db/migrate/20260919120000_create_identity_invitations.rb`, `db/migrate/20260920100000_create_catalog_units.rb` |
+| Postgres RLS on business tables, audit, idempotency keys and invitations, policies on `app.organization_id` (null when unset or reset), app role without `BYPASSRLS` | in place for `audit_events`, `identity_invitations` and the slice 2 tables (`catalog_units`, `catalog_categories`, `catalog_products`, `catalog_unit_conversions`, `inventory_warehouses`, `catalog_partners`), designed for the rest | ADR 0003, `docs/deploy.md`, `db/migrate/20260919110000_create_audit_events.rb`, `db/migrate/20260919120000_create_identity_invitations.rb`, `db/migrate/20260920100000_create_catalog_units.rb` |
 | The whole test suite connects as the app role with production grants, so every spec runs under RLS; raw SQL specs prove other organizations are invisible | in place | ADR 0003, `spec/rails_helper.rb`, `spec/db/audit_events_constraints_spec.rb`, `spec/db/identity_invitations_constraints_spec.rb` |
 | The tenant setting lives on a connection leased for the whole request and is reset on checkin | in place | ADR 0003, `TenantSetting`, `spec/lib/tenant_setting_spec.rb` |
 | Every `/api/v1` route in an isolation spec; a route without an entry fails the suite | in place | `RouteInventory`, `spec/requests/api/v1/route_inventory_spec.rb` |
@@ -90,19 +90,29 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 
 | Control | Status | Evidence |
 |---|---|---|
-| Structured JSON logs tagged with the request, user and organization ids, personal data filtered | in place | `StructuredLogFormatter`, `config/environments/production.rb`; `config/initializers/filter_parameter_logging.rb` still needs document and contact fields once catalog exists |
+| Structured JSON logs tagged with the request, user and organization ids, personal data filtered | in place | `StructuredLogFormatter`, `config/environments/production.rb`, `config/initializers/filter_parameter_logging.rb` (`config.filter_parameters` covers the request-parameter log line at `:info`; `config.active_record.filter_attributes` covers `#inspect`/`#to_json` of a record; the SQL query log itself is a separate case, see Accepted risks below) |
 | Append-only audit trail protected by a trigger | in place | ADR 0010, `db/migrate/20260919110000_create_audit_events.rb`, `spec/db/audit_events_constraints_spec.rb` |
 | Alert on spikes of 401 and 403 responses | designed, Milestone 2 | `docs/scope.md` |
 
 ## LGPD
 
+Personal data map: what is held, where, why and its retention.
+
+| Data | Where | Why | Retention |
+|---|---|---|---|
+| CPF or CNPJ | `catalog_partners.document_number`, encrypted at rest (deterministic, ADR 0012) | Legal identification of a customer or supplier; required to issue a purchase order, a sale, a receipt or a financial title against that party | Kept while the partner record exists; export and anonymization on request lands in Milestone 2 |
+| Partner name | `catalog_partners.name` | Identifies who is being bought from or sold to on every document | Same as above |
+| Partner email, phone | `catalog_partners.email`, `catalog_partners.phone` | Contact for purchasing, sales and finance workflows | Same as above |
+| User name, email | `identity_users.name`, `identity_users.email` | Account identification and sign-in | Kept while the account exists; a user can belong to more than one organization |
+| Request IP, truncated | `audit_events.ip_prefix` (a /24 or /48, never the full address, ADR 0010) | Security investigation of an audited action | Same retention as the audit trail itself |
+
 | Control | Status | Evidence |
 |---|---|---|
-| Personal data map (what, where, why, retention) | designed, slice 2 | this file gains the map when partners exist |
-| Minimization: only data the flows need; no personal data in audit values | designed | ADR 0010 |
-| CPF and CNPJ encrypted at rest (Active Record encryption, deterministic for lookups) | designed, slice 2 | `docs/scope.md` |
+| Personal data map (what, where, why, retention) | in place | the table above |
+| Minimization: only data the flows need; no personal data in audit values | in place | ADR 0010, `Catalog::Partner::PERSONAL_DATA_FIELDS`, `Catalog::CreatePartner`, `Catalog::UpdatePartner` |
+| CPF and CNPJ encrypted at rest (Active Record encryption, deterministic for lookups) | in place | ADR 0012, `Catalog::Partner`, `config/initializers/active_record_encryption.rb` |
 | Export and anonymization on request of the data subject; retention jobs | designed, Milestone 2 | `docs/scope.md` |
-| Seeds, tests and screenshots use generated people and documents only | designed, each slice | `docs/scope.md` |
+| Seeds, tests and screenshots use generated people and documents only | in place | `docs/scope.md`, `DocumentNumberGenerator`, `db/seeds.rb` |
 
 ## Resilience
 
@@ -125,3 +135,4 @@ Status: **in place** (code and a test or CI step exist), **designed** (decided i
 | The public demo accounts are shared by visitors | it is a demo | demo flag denies invitations, email and authentication settings; no session list or IP stored for demo users; nightly reset (ADR 0008) |
 | Console access in production bypasses the audit trail | needed for maintenance | only the maintainer has access; no production console in routine operations |
 | Rate limit counters live in Solid Cache and reset if it is cleared | acceptable window | limits are per minute; clearing is a manual action |
+| The ActiveRecord SQL query log line for an INSERT or UPDATE (`Catalog::Partner Create ... INSERT INTO ...`) prints personal data in clear text: this Postgres adapter logs that line with every value already substituted into the printed string, so neither `filter_parameters` nor `filter_attributes` has a separate bind value left to redact by the time it is printed. Confirmed against a real request, not by reasoning about it. | that log line is written at `:debug`, and every environment outside development and test runs at `:info` or above (`config.log_level`, `RAILS_LOG_LEVEL`), so it is never emitted where it would matter; fully suppressing it would need a custom log subscriber, disproportionate to a gap production never exposes under its documented default | do not run production with `RAILS_LOG_LEVEL=debug`; `filter_attributes` still protects `#inspect`/`#to_json` of a record (an exception backtrace, a console session) |

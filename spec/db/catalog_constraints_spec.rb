@@ -89,4 +89,44 @@ RSpec.describe "Catalog constraints" do
       end
     }.to raise_error(ActiveRecord::RecordNotUnique)
   end
+
+  # document_number is encrypted (ADR 0012): TenantScoped's default_scope is
+  # not the only thing standing between organizations here, so this table
+  # gets the same raw-SQL proof every other catalog table already has,
+  # rather than trusting the ActiveRecord-level tests alone.
+  it "hides another organization's partner from a plain query" do
+    set_current_tenant(organization)
+    partner = create(:partner, organization:)
+
+    set_current_tenant(other_organization)
+    expect(connection.select_value("SELECT count(*) FROM catalog_partners WHERE id = #{partner.id}").to_i).to eq(0)
+  end
+
+  it "refuses to insert a partner for another organization" do
+    set_current_tenant(other_organization)
+
+    expect {
+      connection.transaction(requires_new: true) do
+        connection.execute(<<~SQL)
+          INSERT INTO catalog_partners (organization_id, name, document_type, document_number, customer, created_at, updated_at)
+          VALUES (#{organization.id}, 'Invasor', 'cpf', '#{DocumentNumberGenerator.cpf}', true, now(), now())
+        SQL
+      end
+    }.to raise_error(ActiveRecord::StatementInvalid, /row-level security/)
+  end
+
+  it "rejects a duplicate document_number within the same organization, at the index itself" do
+    set_current_tenant(organization)
+    partner = create(:partner, organization:)
+    ciphertext = connection.select_value("SELECT document_number FROM catalog_partners WHERE id = #{partner.id}")
+
+    expect {
+      connection.transaction(requires_new: true) do
+        connection.execute(<<~SQL)
+          INSERT INTO catalog_partners (organization_id, name, document_type, document_number, customer, created_at, updated_at)
+          VALUES (#{organization.id}, 'Outro nome', 'cpf', #{connection.quote(ciphertext)}, true, now(), now())
+        SQL
+      end
+    }.to raise_error(ActiveRecord::RecordNotUnique, /index_catalog_partners_on_organization_id_and_document_number/)
+  end
 end

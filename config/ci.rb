@@ -17,5 +17,8 @@ CI.run do
 
   step "Build: SPA", "npm --prefix frontend run build"
   step "Build: shell stays out of public", "test ! -e public/spa/index.html && test -f frontend/dist/index.html"
-  step "Boot: production headers", "env RAILS_ENV=production BUNDLE_WITHOUT=development:test RAILS_LOG_LEVEL=fatal SECRET_KEY_BASE_DUMMY=1 APP_HOST=ci.example bin/rails runner script/check_production_headers.rb"
+  step "Boot: production headers",
+    "env RAILS_ENV=production BUNDLE_WITHOUT=development:test RAILS_LOG_LEVEL=fatal SECRET_KEY_BASE_DUMMY=1 " \
+    "APP_HOST=ci.example AR_ENCRYPTION_PRIMARY_KEY=ci-primary-key AR_ENCRYPTION_DETERMINISTIC_KEY=ci-deterministic-key " \
+    "AR_ENCRYPTION_KEY_DERIVATION_SALT=ci-key-derivation-salt bin/rails runner script/check_production_headers.rb"
 end

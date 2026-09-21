@@ -27,4 +27,22 @@ FactoryBot.define do
     purchase_unit { association :unit, organization: organization }
     factor { "1.0" }
   end
+
+  # document_number is a generated, check-digit-valid CPF by default
+  # (docs/scope.md: seeds and specs never use a real document); a trait
+  # switches to a generated CNPJ for specs that need a supplier.
+  factory :partner, class: "Catalog::Partner" do
+    organization
+    sequence(:name) { |n| "Cliente #{n}" }
+    document_type { "cpf" }
+    document_number { DocumentNumberGenerator.cpf }
+    customer { true }
+
+    trait :supplier do
+      document_type { "cnpj" }
+      document_number { DocumentNumberGenerator.cnpj }
+      customer { false }
+      supplier { true }
+    end
+  end
 end
