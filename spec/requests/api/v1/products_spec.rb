@@ -88,6 +88,11 @@ RSpec.describe "Products API" do
 
       get "/api/v1/products", params: { q: "tijo" }
       expect(response.parsed_body["data"].map { |p| p["sku"] }).to eq([ "TIJ-001" ])
+
+      # A blank active param (an unset SPA filter serialized as "", rather
+      # than omitted) must mean "no filter", not "cast to false".
+      get "/api/v1/products", params: { active: "" }
+      expect(response.parsed_body["data"].map { |p| p["sku"] }).to contain_exactly("CIM-001", "VER-001", "TIJ-001")
     end
   end
 

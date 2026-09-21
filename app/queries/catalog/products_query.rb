@@ -21,7 +21,7 @@ module Catalog
     private
       def filtered(scope, category_id:, active:, q:)
         scope = scope.where(category_id:) if category_id.present?
-        scope = scope.where(active: ActiveModel::Type::Boolean.new.cast(active)) unless active.nil?
+        scope = scope.where(active: ActiveModel::Type::Boolean.new.cast(active)) if active.present?
         scope = scope.where("name ILIKE :q OR sku ILIKE :q", q: "%#{sanitize_like(q)}%") if q.present?
         scope
       end

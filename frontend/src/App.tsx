@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/shell/AppShell";
 import { Spinner } from "./components/ui/Spinner";
+import { ProductDetailScreen } from "./features/catalog/ProductDetailScreen";
+import { ProductsScreen } from "./features/catalog/ProductsScreen";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { useSession } from "./features/identity/api";
 import { MembersScreen } from "./features/identity/MembersScreen";
@@ -55,6 +57,17 @@ export function App() {
     !user.demo &&
     (membership.role === "owner" || membership.role === "admin"),
   );
+  // Mirrors Identity::Capabilities.manage_master_data? (ADR 0008: owner,
+  // admin and purchasing write master data; every role, demo included,
+  // can read it, so there is no separate "can view" boolean here, only
+  // whether the create/edit form or a read-only view renders).
+  const canManageMasterData = Boolean(
+    user &&
+    membership &&
+    (membership.role === "owner" ||
+      membership.role === "admin" ||
+      membership.role === "purchasing"),
+  );
 
   return (
     <Routes>
@@ -81,6 +94,14 @@ export function App() {
                     }
                   />
                 )}
+                <Route
+                  path="/estoque/produtos"
+                  element={<ProductsScreen canManage={canManageMasterData} />}
+                />
+                <Route
+                  path="/estoque/produtos/:id"
+                  element={<ProductDetailScreen canManage={canManageMasterData} />}
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppShell>
