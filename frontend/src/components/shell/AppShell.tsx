@@ -52,6 +52,14 @@ export function AppShell({
           >
             {t("shell.navWarehouses")}
           </NavLink>
+          <NavLink
+            to="/parceiros"
+            className={({ isActive }) =>
+              `shrink-0 rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
+            }
+          >
+            {t("shell.navPartners")}
+          </NavLink>
           {canManageMembers && (
             <NavLink
               to="/membros"
