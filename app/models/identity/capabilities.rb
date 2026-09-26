@@ -72,6 +72,18 @@ module Identity
       %w[owner admin purchasing].include?(membership.role)
     end
 
+    # ADR 0008's matrix: owner, admin and purchasing write purchase orders and
+    # receipts, finance and read_only read them, sales has no access at all.
+    def view_purchasing?(membership)
+      membership.present? && membership.role != "sales"
+    end
+
+    def manage_purchasing?(membership)
+      return false unless membership
+
+      %w[owner admin purchasing].include?(membership.role)
+    end
+
     # ADR 0014: the full CPF, e-mail and phone of a partner are personal
     # data, so read_only sees them masked or absent; every role that works
     # with customers and suppliers sees them.

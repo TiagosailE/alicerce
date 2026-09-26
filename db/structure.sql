@@ -744,6 +744,119 @@ ALTER SEQUENCE public.inventory_warehouses_id_seq OWNED BY public.inventory_ware
 
 
 --
+-- Name: purchasing_order_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchasing_order_lines (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    order_id bigint NOT NULL,
+    "position" integer NOT NULL,
+    product_id bigint NOT NULL,
+    product_sku character varying NOT NULL,
+    product_name character varying NOT NULL,
+    purchase_unit_id bigint NOT NULL,
+    purchase_unit_code character varying NOT NULL,
+    stock_unit_code character varying NOT NULL,
+    factor numeric(15,6) NOT NULL,
+    quantity numeric(15,3) NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    discount_bp integer DEFAULT 0 NOT NULL,
+    gross_cents bigint NOT NULL,
+    discount_cents bigint NOT NULL,
+    net_cents bigint NOT NULL,
+    received_quantity numeric(15,3) DEFAULT 0.0 NOT NULL,
+    received_stock_quantity numeric(15,3) DEFAULT 0.0 NOT NULL,
+    received_gross_cents bigint DEFAULT 0 NOT NULL,
+    received_discount_cents bigint DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT purchasing_order_lines_amounts_consistent CHECK (((gross_cents >= 0) AND (discount_cents >= 0) AND (discount_cents <= gross_cents) AND (net_cents = (gross_cents - discount_cents)))),
+    CONSTRAINT purchasing_order_lines_discount_range CHECK (((discount_bp >= 0) AND (discount_bp <= 10000))),
+    CONSTRAINT purchasing_order_lines_factor_positive CHECK ((factor > (0)::numeric)),
+    CONSTRAINT purchasing_order_lines_gross_cap CHECK ((gross_cents <= '1000000000000000'::bigint)),
+    CONSTRAINT purchasing_order_lines_price_not_negative CHECK ((unit_price_cents >= 0)),
+    CONSTRAINT purchasing_order_lines_quantity_positive CHECK ((quantity > (0)::numeric)),
+    CONSTRAINT purchasing_order_lines_received_within_line CHECK ((((received_quantity >= (0)::numeric) AND (received_quantity <= quantity)) AND (received_stock_quantity >= (0)::numeric) AND ((received_gross_cents >= 0) AND (received_gross_cents <= gross_cents)) AND ((received_discount_cents >= 0) AND (received_discount_cents <= discount_cents))))
+);
+
+
+--
+-- Name: purchasing_order_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.purchasing_order_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: purchasing_order_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.purchasing_order_lines_id_seq OWNED BY public.purchasing_order_lines.id;
+
+
+--
+-- Name: purchasing_orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchasing_orders (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    number bigint NOT NULL,
+    supplier_id bigint NOT NULL,
+    supplier_name character varying NOT NULL,
+    supplier_document_type character varying NOT NULL,
+    supplier_document_number character varying NOT NULL,
+    status character varying DEFAULT 'draft'::character varying NOT NULL,
+    currency character varying(3) DEFAULT 'BRL'::character varying NOT NULL,
+    installments integer DEFAULT 1 NOT NULL,
+    first_due_days integer DEFAULT 30 NOT NULL,
+    interval_days integer DEFAULT 30 NOT NULL,
+    note text,
+    total_cents bigint DEFAULT 0 NOT NULL,
+    revision integer DEFAULT 0 NOT NULL,
+    approved_at timestamp(6) without time zone,
+    approved_by_user_id bigint,
+    cancelled_at timestamp(6) without time zone,
+    cancelled_by_user_id bigint,
+    created_by_user_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT purchasing_orders_currency_brl CHECK (((currency)::text = 'BRL'::text)),
+    CONSTRAINT purchasing_orders_first_due_days_range CHECK (((first_due_days >= 0) AND (first_due_days <= 365))),
+    CONSTRAINT purchasing_orders_installments_range CHECK (((installments >= 1) AND (installments <= 24))),
+    CONSTRAINT purchasing_orders_interval_days_range CHECK (((interval_days >= 0) AND (interval_days <= 365))),
+    CONSTRAINT purchasing_orders_revision_not_negative CHECK ((revision >= 0)),
+    CONSTRAINT purchasing_orders_status_valid CHECK (((status)::text = ANY ((ARRAY['draft'::character varying, 'approved'::character varying, 'partially_received'::character varying, 'received'::character varying, 'cancelled'::character varying])::text[]))),
+    CONSTRAINT purchasing_orders_total_range CHECK (((total_cents >= 0) AND (total_cents <= '1000000000000000'::bigint)))
+);
+
+
+--
+-- Name: purchasing_orders_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.purchasing_orders_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: purchasing_orders_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.purchasing_orders_id_seq OWNED BY public.purchasing_orders.id;
+
+
+--
 -- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1341,6 +1454,20 @@ ALTER TABLE ONLY public.inventory_warehouses ALTER COLUMN id SET DEFAULT nextval
 
 
 --
+-- Name: purchasing_order_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_order_lines ALTER COLUMN id SET DEFAULT nextval('public.purchasing_order_lines_id_seq'::regclass);
+
+
+--
+-- Name: purchasing_orders id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_orders ALTER COLUMN id SET DEFAULT nextval('public.purchasing_orders_id_seq'::regclass);
+
+
+--
 -- Name: solid_cache_entries id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1572,6 +1699,22 @@ ALTER TABLE ONLY public.inventory_movements
 
 ALTER TABLE ONLY public.inventory_warehouses
     ADD CONSTRAINT inventory_warehouses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: purchasing_order_lines purchasing_order_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_order_lines
+    ADD CONSTRAINT purchasing_order_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: purchasing_orders purchasing_orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_orders
+    ADD CONSTRAINT purchasing_orders_pkey PRIMARY KEY (id);
 
 
 --
@@ -2059,6 +2202,90 @@ CREATE UNIQUE INDEX index_inventory_warehouses_on_organization_id_and_lower_name
 
 
 --
+-- Name: index_purchasing_order_lines_on_order_id_and_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_order_lines_on_order_id_and_position ON public.purchasing_order_lines USING btree (order_id, "position");
+
+
+--
+-- Name: index_purchasing_order_lines_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_order_lines_on_organization_id ON public.purchasing_order_lines USING btree (organization_id);
+
+
+--
+-- Name: index_purchasing_order_lines_on_organization_id_and_product_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_order_lines_on_organization_id_and_product_id ON public.purchasing_order_lines USING btree (organization_id, product_id);
+
+
+--
+-- Name: index_purchasing_order_lines_on_organization_order_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_order_lines_on_organization_order_and_id ON public.purchasing_order_lines USING btree (organization_id, order_id, id);
+
+
+--
+-- Name: index_purchasing_orders_on_approved_by_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_orders_on_approved_by_user_id ON public.purchasing_orders USING btree (approved_by_user_id);
+
+
+--
+-- Name: index_purchasing_orders_on_cancelled_by_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_orders_on_cancelled_by_user_id ON public.purchasing_orders USING btree (cancelled_by_user_id);
+
+
+--
+-- Name: index_purchasing_orders_on_created_by_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_orders_on_created_by_user_id ON public.purchasing_orders USING btree (created_by_user_id);
+
+
+--
+-- Name: index_purchasing_orders_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_orders_on_organization_id ON public.purchasing_orders USING btree (organization_id);
+
+
+--
+-- Name: index_purchasing_orders_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_orders_on_organization_id_and_id ON public.purchasing_orders USING btree (organization_id, id);
+
+
+--
+-- Name: index_purchasing_orders_on_organization_id_and_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_orders_on_organization_id_and_number ON public.purchasing_orders USING btree (organization_id, number);
+
+
+--
+-- Name: index_purchasing_orders_on_organization_id_and_supplier_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_orders_on_organization_id_and_supplier_id ON public.purchasing_orders USING btree (organization_id, supplier_id);
+
+
+--
+-- Name: index_purchasing_orders_on_organization_status_and_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_orders_on_organization_status_and_number ON public.purchasing_orders USING btree (organization_id, status, number);
+
+
+--
 -- Name: index_solid_cache_entries_on_byte_size; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2389,6 +2616,38 @@ ALTER TABLE ONLY public.inventory_movements
 
 
 --
+-- Name: purchasing_order_lines fk_purchasing_order_lines_order_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_order_lines
+    ADD CONSTRAINT fk_purchasing_order_lines_order_same_organization FOREIGN KEY (organization_id, order_id) REFERENCES public.purchasing_orders(organization_id, id);
+
+
+--
+-- Name: purchasing_order_lines fk_purchasing_order_lines_product_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_order_lines
+    ADD CONSTRAINT fk_purchasing_order_lines_product_same_organization FOREIGN KEY (organization_id, product_id) REFERENCES public.catalog_products(organization_id, id);
+
+
+--
+-- Name: purchasing_order_lines fk_purchasing_order_lines_unit_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_order_lines
+    ADD CONSTRAINT fk_purchasing_order_lines_unit_same_organization FOREIGN KEY (organization_id, purchase_unit_id) REFERENCES public.catalog_units(organization_id, id);
+
+
+--
+-- Name: purchasing_orders fk_purchasing_orders_supplier_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_orders
+    ADD CONSTRAINT fk_purchasing_orders_supplier_same_organization FOREIGN KEY (organization_id, supplier_id) REFERENCES public.catalog_partners(organization_id, id);
+
+
+--
 -- Name: idempotency_keys fk_rails_149452d765; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2453,11 +2712,27 @@ ALTER TABLE ONLY public.solid_queue_failed_executions
 
 
 --
+-- Name: purchasing_order_lines fk_rails_3e29fa7f2b; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_order_lines
+    ADD CONSTRAINT fk_rails_3e29fa7f2b FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: identity_invitations fk_rails_40f5359788; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.identity_invitations
     ADD CONSTRAINT fk_rails_40f5359788 FOREIGN KEY (accepted_by_user_id) REFERENCES public.identity_users(id);
+
+
+--
+-- Name: purchasing_orders fk_rails_429df39186; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_orders
+    ADD CONSTRAINT fk_rails_429df39186 FOREIGN KEY (approved_by_user_id) REFERENCES public.identity_users(id);
 
 
 --
@@ -2474,6 +2749,14 @@ ALTER TABLE ONLY public.identity_invitations
 
 ALTER TABLE ONLY public.solid_queue_blocked_executions
     ADD CONSTRAINT fk_rails_4cd34e2228 FOREIGN KEY (job_id) REFERENCES public.solid_queue_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: purchasing_orders fk_rails_569be89051; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_orders
+    ADD CONSTRAINT fk_rails_569be89051 FOREIGN KEY (cancelled_by_user_id) REFERENCES public.identity_users(id);
 
 
 --
@@ -2554,6 +2837,22 @@ ALTER TABLE ONLY public.solid_queue_ready_executions
 
 ALTER TABLE ONLY public.identity_sessions
     ADD CONSTRAINT fk_rails_83ac02eea5 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
+-- Name: purchasing_orders fk_rails_8868aedce6; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_orders
+    ADD CONSTRAINT fk_rails_8868aedce6 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
+-- Name: purchasing_orders fk_rails_88ff1f8367; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_orders
+    ADD CONSTRAINT fk_rails_88ff1f8367 FOREIGN KEY (created_by_user_id) REFERENCES public.identity_users(id);
 
 
 --
@@ -2801,12 +3100,41 @@ CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehous
 
 
 --
+-- Name: purchasing_order_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchasing_order_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchasing_order_lines purchasing_order_lines_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purchasing_order_lines_tenant_isolation ON public.purchasing_order_lines USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: purchasing_orders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchasing_orders ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchasing_orders purchasing_orders_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purchasing_orders_tenant_isolation ON public.purchasing_orders USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926150200'),
+('20260926150100'),
+('20260926150000'),
 ('20260926140000'),
 ('20260926130000'),
 ('20260926120400'),

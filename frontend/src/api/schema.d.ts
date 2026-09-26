@@ -315,6 +315,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/purchase_orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List purchase orders, newest number first
+         * @description Owner, admin, purchasing, finance and read_only can read; sales has no access (ADR 0017, ADR 0008).
+         */
+        get: operations["listPurchaseOrders"];
+        put?: never;
+        /**
+         * Create a draft purchase order
+         * @description Owner, admin and purchasing only. Copies the supplier and each product as they are now (ADR 0015), works out every line's amounts and the order's total, and numbers the order. Amounts are stored; a client never computes them.
+         */
+        post: operations["createPurchaseOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/purchase_orders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a purchase order with its lines
+         * @description The supplier's CPF is masked for a role that may not see a partner's in full (ADR 0014).
+         */
+        get: operations["showPurchaseOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Replace a draft purchase order's supplier, terms, note and lines
+         * @description Owner, admin and purchasing only, and only while the order is a draft. Send the revision that was read; a newer one on the server answers 409 stale and writes nothing (ADR 0015).
+         */
+        patch: operations["updatePurchaseOrder"];
+        trace?: never;
+    };
+    "/purchase_orders/{id}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a draft purchase order
+         * @description Owner, admin and purchasing only. The approver sends the revision they saw, so an edit made in between answers 409 stale instead of being approved unseen. Approval checks the order can be received and freezes what it copies.
+         */
+        post: operations["approvePurchaseOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/purchase_orders/{id}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a purchase order
+         * @description Owner, admin and purchasing only. A draft or approved order ends; a partially received one is closed at what has been received. A received or cancelled order answers 409 invalid_transition.
+         */
+        post: operations["cancelPurchaseOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/partners": {
         parameters: {
             query?: never;
@@ -853,6 +941,118 @@ export interface components {
             /** @description Cost per stock unit in cents (a decimal string, since a unit can cost a fraction of a cent), at most 6 places, for an increase. Required when the balance has no average or last cost to value it with (kind required on unit_cost_cents); not allowed for a decrease (ADR 0016). */
             unit_cost_cents?: string;
         };
+        /** @enum {string} */
+        PurchaseOrderStatus: "draft" | "approved" | "partially_received" | "received" | "cancelled";
+        PurchaseOrderSummary: {
+            id: number;
+            number: number;
+            status: components["schemas"]["PurchaseOrderStatus"];
+            supplier: {
+                id: number;
+                name: string;
+            };
+            total_cents: number;
+            /** @enum {string} */
+            currency: "BRL";
+            /** Format: date-time */
+            created_at: string;
+        };
+        PurchaseOrderLine: {
+            id: number;
+            position: number;
+            product: {
+                id: number;
+                sku: string;
+                name: string;
+            };
+            purchase_unit_code: string;
+            stock_unit_code: string;
+            /** @description Stock units per purchase unit, as copied from the product (ADR 0015). */
+            factor: string;
+            /** @description In purchase units. */
+            quantity: string;
+            received_quantity: string;
+            remaining_quantity: string;
+            /** @description Per purchase unit. */
+            unit_price_cents: number;
+            /** @description Basis points, 0 to 10000. */
+            discount_bp: number;
+            gross_cents: number;
+            discount_cents: number;
+            net_cents: number;
+        };
+        PurchaseOrder: {
+            id: number;
+            number: number;
+            status: components["schemas"]["PurchaseOrderStatus"];
+            supplier: {
+                id: number;
+                name: string;
+                /** @enum {string} */
+                document_type: "cpf" | "cnpj";
+                /** @description Copied when the order was created; a CPF is masked when personal_data_visible is false (ADR 0014). */
+                document_number: string;
+            };
+            installments: number;
+            first_due_days: number;
+            interval_days: number;
+            note: string | null;
+            /** @description The sum of the lines' net amounts, stored. */
+            total_cents: number;
+            /** @enum {string} */
+            currency: "BRL";
+            /** @description Send it back when editing or approving a draft (ADR 0015). */
+            revision: number;
+            personal_data_visible: boolean;
+            /** Format: date-time */
+            approved_at: string | null;
+            /** Format: date-time */
+            cancelled_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            lines: components["schemas"]["PurchaseOrderLine"][];
+        };
+        PurchaseOrderResponseBody: {
+            data: components["schemas"]["PurchaseOrder"];
+        };
+        PurchaseOrderListResponseBody: {
+            data: components["schemas"]["PurchaseOrderSummary"][];
+            meta: components["schemas"]["Meta"];
+        };
+        PurchaseOrderLineInput: {
+            product_id: number;
+            /** @description In purchase units, at most 3 places. */
+            quantity: string;
+            /** @description Per purchase unit. */
+            unit_price_cents: number;
+            /** @description Basis points off the line's gross; 0 when omitted. */
+            discount_bp?: number;
+        };
+        CreatePurchaseOrderRequest: {
+            supplier_id: number;
+            /** @description How many installments each receipt's payable is split in; 1 when omitted. */
+            installments?: number;
+            /** @description Days from the receipt to the first due date; 30 when omitted. */
+            first_due_days?: number;
+            /** @description Days between installments; 30 when omitted. */
+            interval_days?: number;
+            note?: string;
+            lines: components["schemas"]["PurchaseOrderLineInput"][];
+        };
+        UpdatePurchaseOrderRequest: {
+            supplier_id: number;
+            installments?: number;
+            first_due_days?: number;
+            interval_days?: number;
+            note?: string;
+            lines: components["schemas"]["PurchaseOrderLineInput"][];
+            /** @description The revision that was read; a newer one answers 409 stale (ADR 0015). */
+            revision: number;
+        };
+        PurchaseOrderRevisionRequest: {
+            /** @description The revision the approver saw; a newer one answers 409 stale (ADR 0015). */
+            revision: number;
+        };
         /** @description A partner as listed (ADR 0014). The CPF is masked for every role and e-mail and phone are not part of a list; the full record comes from GET /partners/{id}. */
         PartnerSummary: {
             id: number;
@@ -1076,6 +1276,24 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["StockAdjustmentResponseBody"];
+            };
+        };
+        /** @description A purchase order with its lines. */
+        PurchaseOrderResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PurchaseOrderResponseBody"];
+            };
+        };
+        /** @description A page of purchase orders. */
+        PurchaseOrderListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PurchaseOrderListResponseBody"];
             };
         };
         /** @description A partner. */
@@ -1603,6 +1821,142 @@ export interface operations {
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
             429: components["responses"]["Error"];
+        };
+    };
+    listPurchaseOrders: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                status?: components["schemas"]["PurchaseOrderStatus"];
+                supplier_id?: number;
+                /** @description Matches the order number or the supplier's name. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PurchaseOrderListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    createPurchaseOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePurchaseOrderRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["PurchaseOrderResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    showPurchaseOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PurchaseOrderResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updatePurchaseOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePurchaseOrderRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["PurchaseOrderResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    approvePurchaseOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurchaseOrderRevisionRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["PurchaseOrderResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    cancelPurchaseOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PurchaseOrderResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     listPartners: {
