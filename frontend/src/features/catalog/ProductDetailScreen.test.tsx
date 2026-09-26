@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -87,6 +87,7 @@ function renderScreen(canManage = true) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 describe("ProductDetailScreen", () => {
@@ -242,6 +243,69 @@ describe("ProductDetailScreen", () => {
 
     await waitFor(() => {
       expect(patch).toHaveBeenCalledTimes(2);
+    });
+    expect(bodies.map((body) => body.revision)).toEqual([3, 4]);
+  });
+
+  it("saves against the revision the form was opened at, not one fetched while it was open", async () => {
+    let served = 0;
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultHandlers,
+        "GET /products/42": () => {
+          served += 1;
+          return jsonResponse({
+            data:
+              served === 1 ? product() : product({ name: "Editado por outra pessoa", revision: 4 }),
+          });
+        },
+        "PATCH /products/42": async (request) => {
+          bodies.push((await jsonBody(request)) as Record<string, unknown>);
+          return errorEnvelope("stale", "Stale", { current_revision: 4 }, 409);
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    const queryClient = renderScreen();
+    await screen.findByLabelText("Nome");
+
+    await act(async () => {
+      await queryClient.refetchQueries({ queryKey: ["catalog", "product", 42] });
+    });
+    expect(screen.getByLabelText("Nome")).toHaveValue("Tijolo comum");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/alterado por outra pessoa/);
+    expect(bodies.map((body) => body.revision)).toEqual([3]);
+  });
+
+  it("saves the next edit against the revision the last save returned", async () => {
+    let saves = 0;
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultHandlers,
+        "GET /products/42": () => jsonResponse({ data: product() }),
+        "PATCH /products/42": async (request) => {
+          bodies.push((await jsonBody(request)) as Record<string, unknown>);
+          saves += 1;
+          return jsonResponse({ data: product({ revision: 3 + saves }) });
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByLabelText("Nome");
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+    await screen.findByRole("status");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => {
+      expect(bodies).toHaveLength(2);
     });
     expect(bodies.map((body) => body.revision)).toEqual([3, 4]);
   });

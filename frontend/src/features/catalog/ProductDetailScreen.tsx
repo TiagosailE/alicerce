@@ -6,6 +6,7 @@ import { SectionLoading } from "../../components/ui/SectionLoading";
 import { StatusMessage, useActionStatus } from "../../components/ui/StatusMessage";
 import { isStale } from "../../lib/errors";
 import { formatQuantity } from "../../lib/format";
+import { useOpenedRevision } from "../../lib/useOpenedRevision";
 import { t } from "../../i18n";
 import { useCategories, useProduct, useUnits, useUpdateProduct } from "./api";
 import { ProductForm, productToInitial } from "./ProductForm";
@@ -31,6 +32,7 @@ export function ProductDetailScreen({ canManage }: { canManage: boolean }) {
   // keep their own state, so refetching alone would leave the old input in.
   const [formKey, setFormKey] = useState(0);
   const current = product.data;
+  const opened = useOpenedRevision(current?.revision);
 
   return (
     <div>
@@ -88,9 +90,10 @@ export function ProductDetailScreen({ canManage }: { canManage: boolean }) {
                 showActiveToggle
                 onSubmit={(input) => {
                   updateProduct.mutate(
-                    { id: productId, revision: current.revision, ...input },
+                    { id: productId, revision: opened.revision ?? current.revision, ...input },
                     {
-                      onSuccess: () => {
+                      onSuccess: (saved) => {
+                        opened.adopt(saved.revision);
                         status.succeed(t("products.updateSuccess"));
                       },
                     },
@@ -105,6 +108,7 @@ export function ProductDetailScreen({ canManage }: { canManage: boolean }) {
                   onClick={() => {
                     void product.refetch().then(() => {
                       updateProduct.reset();
+                      opened.adopt(null);
                       setFormKey((key) => key + 1);
                     });
                   }}
