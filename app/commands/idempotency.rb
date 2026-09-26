@@ -1,13 +1,18 @@
 require "digest"
 
-# Idempotency for critical writes (ADR 0005). A command calls claim inside its
+# Idempotency for critical writes (ADR 0005). A command calls run inside its
 # transaction, right after the lock timeout (ADR 0004):
 #
-#   claim = Idempotency.claim(organization:, user:, key:, request_digest:)
-#   return replay(claim) if claim.replay?
-#   return Result.failure(:idempotency_key_reused) if claim.reused?
-#   ...do the effect...
-#   claim.complete!(status: 201, resource: created_record)
+#   Idempotency.run(organization:, user:, key:, request_digest:, on_replay: ->(record) { ... }) do |claim|
+#     ...do the effect...
+#     claim.complete!(status: 201, resource: created_record)
+#     Result.success(...)
+#   end
+#
+# A repeated request never reaches the block: on_replay renders what the key
+# stored, and a key used for a different request is rejected. A block that
+# succeeds without completing its claim is a bug and raises, because a key
+# committed with no resource would replay as a 404.
 #
 # The insert waits on the unique index when a concurrent request holds the same
 # key uncommitted; when that one rolls back the insert proceeds, when it
@@ -28,6 +33,8 @@ module Idempotency
     def replay? = @state == :replay
     def reused? = @state == :reused
 
+    def completed? = record.response_status.present?
+
     def complete!(status:, resource:)
       record.update!(response_status: status, resource_type: resource.class.name, resource_id: resource.id)
     end
@@ -42,6 +49,17 @@ module Idempotency
   # never does.
   def digest(method:, path:, params:)
     Digest::SHA256.hexdigest([ method.to_s.upcase, path, JSON.generate(canonical(params)) ].join("\n"))
+  end
+
+  def run(organization:, user:, key:, request_digest:, on_replay:)
+    claim = claim(organization:, user:, key:, request_digest:)
+    return on_replay.call(claim.record) if claim.replay?
+    return Result.failure(:idempotency_key_reused) if claim.reused?
+
+    result = yield claim
+    raise "Idempotency key claimed and never completed" if result.success? && !claim.completed?
+
+    result
   end
 
   def claim(organization:, user:, key:, request_digest:)

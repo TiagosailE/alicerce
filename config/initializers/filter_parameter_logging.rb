@@ -1,6 +1,8 @@
 Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
   :document_number, :phone, :name,
+  # A stock movement's free-text note can carry anything an operator types.
+  :note,
   # Partner search (?q=Marcos+Pereira) carries a person's name. Anchored
   # because a bare :q would match every key that merely contains the letter,
   # like request or quantity.
@@ -18,4 +20,4 @@ Rails.application.config.filter_parameters += [
 # log output while verifying this change, not by reasoning about it; see
 # docs/security.md's Accepted risks for the actual mitigation (that line
 # logs at :debug, which production's default log level never emits).
-Rails.application.config.active_record.filter_attributes = [ :document_number, :phone, :name, :email ]
+Rails.application.config.active_record.filter_attributes = [ :document_number, :phone, :name, :email, :note ]

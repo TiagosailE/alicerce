@@ -17,6 +17,7 @@ module DatabaseRoles
   OWNER_ONLY_FUNCTIONS = {
     "audit_purge" => "bigint, timestamptz",
     "audit_redact" => "bigint, varchar, bigint",
+    "inventory_movement_redact_note" => "bigint, bigint",
     "invitation_organization_id" => "varchar"
   }.freeze
 

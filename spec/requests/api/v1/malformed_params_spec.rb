@@ -50,6 +50,14 @@ RSpec.describe "Malformed parameters" do
       expect_invalid("category_id")
     end
 
+    it "clamps a page number beyond any real page instead of overflowing the OFFSET" do
+      get "/api/v1/units?page=99999999999999999999"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["data"]).to eq([])
+      expect(response.parsed_body.dig("meta", "page")).to eq(Pagination::MAX_PAGE)
+    end
+
     it "still answers 200 for well formed pagination" do
       get "/api/v1/units?page=1&per_page=10"
 

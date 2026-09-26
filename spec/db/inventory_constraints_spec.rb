@@ -161,14 +161,67 @@ RSpec.describe "Inventory constraints" do
         .to raise_error(ActiveRecord::InvalidForeignKey, /fk_inventory_movements_warehouse_same_organization/)
     end
 
-    it "is append-only: the app role can neither update nor delete a movement (ADR 0016)" do
+    it "is append-only: the app role holds no UPDATE, DELETE or TRUNCATE on it, only INSERT and SELECT (ADR 0016)" do
+      privileges = %w[SELECT INSERT UPDATE DELETE TRUNCATE].to_h do |privilege|
+        [ privilege, connection.select_value("SELECT has_table_privilege(current_user, 'inventory_movements', '#{privilege}')") ]
+      end
+
+      expect(privileges).to eq("SELECT" => true, "INSERT" => true, "UPDATE" => false, "DELETE" => false, "TRUNCATE" => false)
+    end
+
+    it "is refused an UPDATE, a DELETE and a TRUNCATE as the app role" do
       product, warehouse = pair
       insert_movement(product:, warehouse:)
 
-      expect { connection.transaction(requires_new: true) { connection.execute("UPDATE inventory_movements SET quantity = 99") } }
-        .to raise_error(ActiveRecord::StatementInvalid, /permission denied|append-only/)
-      expect { connection.transaction(requires_new: true) { connection.execute("DELETE FROM inventory_movements") } }
-        .to raise_error(ActiveRecord::StatementInvalid, /permission denied|append-only/)
+      %w[UPDATE\ inventory_movements\ SET\ quantity\ =\ 99 DELETE\ FROM\ inventory_movements TRUNCATE\ inventory_movements].each do |statement|
+        expect { connection.transaction(requires_new: true) { connection.execute(statement) } }
+          .to raise_error(ActiveRecord::StatementInvalid, /permission denied/), "expected #{statement} to be refused"
+      end
+    end
+
+    it "keeps the second layer too: a row trigger for UPDATE and DELETE and a statement trigger for TRUNCATE" do
+      triggers = connection.select_values("SELECT tgname FROM pg_trigger WHERE tgrelid = 'inventory_movements'::regclass AND NOT tgisinternal")
+
+      expect(triggers).to contain_exactly("inventory_movements_append_only", "inventory_movements_no_truncate")
+    end
+
+    describe "erasing a note that should not have been typed" do
+      def movement_with_note(note)
+        product, warehouse = pair
+        Inventory::Movement.create!(
+          organization:, product:, warehouse:, kind: "adjustment", reason: "count", quantity: 1, value_cents: 1,
+          on_hand_after: 1, value_after_cents: 1, actor_user: actor, note:
+        )
+      end
+
+      def note_of(movement) = connection.select_value("SELECT note FROM inventory_movements WHERE id = #{movement.id}")
+
+      it "is possible through the owner-only function, for the current organization only, and touches nothing else" do
+        movement = movement_with_note("Cliente Joao Silva, CPF 000")
+
+        redacted = connection.select_value("SELECT inventory_movement_redact_note(#{organization.id}, #{movement.id})")
+
+        expect(redacted.to_i).to eq(1)
+        expect(note_of(movement)).to be_nil
+        expect(connection.select_value("SELECT quantity FROM inventory_movements WHERE id = #{movement.id}")).to eq(1)
+      end
+
+      it "refuses to point at another organization's movement" do
+        movement = movement_with_note("secret")
+
+        expect do
+          connection.transaction(requires_new: true) do
+            connection.execute("SELECT inventory_movement_redact_note(#{other_organization.id}, #{movement.id})")
+          end
+        end.to raise_error(ActiveRecord::StatementInvalid, /not the current organization/)
+        expect(note_of(movement)).to eq("secret")
+      end
+
+      it "does nothing to a movement that has no note" do
+        movement = movement_with_note(nil)
+
+        expect(connection.select_value("SELECT inventory_movement_redact_note(#{organization.id}, #{movement.id})").to_i).to eq(0)
+      end
     end
 
     it "is read-only at the model too" do

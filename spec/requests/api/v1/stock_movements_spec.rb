@@ -12,11 +12,14 @@ RSpec.describe "Stock movements API" do
     user
   end
 
+  # expected defaults to the balance as it stands, like a client that just looked.
   def adjust!(org, product, warehouse, quantity, reason: "count", cost: nil)
     set_current_tenant(org)
+    current = Inventory::Balance.find_by(product_id: product.id, warehouse_id: warehouse.id)
+    expected = current ? current.on_hand.to_s("F") : "0"
     result = Inventory::AdjustStock.call(
-      organization: org, actor:, product:, warehouse:, counted_quantity: quantity, reason:, unit_cost: cost,
-      idempotency_key: SecureRandom.uuid, request_digest: SecureRandom.hex(8)
+      organization: org, actor:, product:, warehouse:, counted_quantity: quantity, expected_on_hand: expected, reason:,
+      unit_cost_cents: cost, idempotency_key: SecureRandom.uuid, request_digest: SecureRandom.hex(8)
     )
     raise result.error.to_s unless result.success?
   end
@@ -83,6 +86,40 @@ RSpec.describe "Stock movements API" do
 
       get "/api/v1/stock_movements", params: { product_id: product.id }
       expect(response.parsed_body["meta"]["total"]).to eq(3)
+    end
+
+    it "hides values from the sales role and shows them to finance" do
+      set_current_tenant(organization)
+      warehouse = create(:warehouse, organization:)
+      product = create(:product, organization:)
+      adjust!(organization, product, warehouse, "10", reason: "opening_balance", cost: "84.99")
+      sales = create_membership(organization, role: "sales")
+      finance = create_membership(organization, role: "finance")
+
+      sign_in_via_api(email: sales.email, password:)
+      get "/api/v1/stock_movements"
+      assert_response_schema_confirm(200)
+      expect(response.parsed_body["data"].first).to include("quantity" => "10.000", "value_cents" => nil, "value_after_cents" => nil)
+
+      sign_in_via_api(email: finance.email, password:)
+      get "/api/v1/stock_movements"
+      expect(response.parsed_body["data"].first).to include("value_cents" => 850, "value_after_cents" => 850)
+    end
+
+    it "orders the ledger by id, newest first, whatever the clock said" do
+      user = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      warehouse = create(:warehouse, organization:)
+      product = create(:product, organization:)
+      adjust!(organization, product, warehouse, "10", reason: "opening_balance", cost: "10")
+      adjust!(organization, product, warehouse, "8", reason: "loss")
+      adjust!(organization, product, warehouse, "9", reason: "found")
+      sign_in_via_api(email: user.email, password:)
+
+      get "/api/v1/stock_movements"
+
+      ids = response.parsed_body["data"].map { |row| row["id"] }
+      expect(ids).to eq(ids.sort.reverse)
     end
   end
 end

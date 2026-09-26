@@ -26,7 +26,8 @@ RSpec.describe "Stock adjustments API" do
   end
 
   def adjustment_params(product, warehouse, overrides = {})
-    { product_id: product.id, warehouse_id: warehouse.id, counted_quantity: "10", reason: "opening_balance", unit_cost: "84.99" }.merge(overrides)
+    { product_id: product.id, warehouse_id: warehouse.id, counted_quantity: "10", expected_on_hand: "0.000", reason: "opening_balance",
+      unit_cost_cents: "84.99" }.merge(overrides)
   end
 
   describe "POST /api/v1/stock_adjustments" do
@@ -101,7 +102,7 @@ RSpec.describe "Stock adjustments API" do
       expect(data["movement"]["actor"]["id"]).to eq(owner.id)
       expect(data["balance"]).to include(
         "on_hand" => "10.000", "reserved" => "0.000", "available" => "10.000", "value_cents" => 850,
-        "last_unit_cost" => "84.990000"
+        "last_unit_cost_cents" => "84.990000"
       )
     end
 
@@ -145,7 +146,9 @@ RSpec.describe "Stock adjustments API" do
       csrf_token = sign_in_and_csrf(owner)
       post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse), as: :json, headers: headers(csrf_token)
 
-      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, unit_cost: nil), as: :json, headers: headers(csrf_token)
+      post "/api/v1/stock_adjustments",
+        params: adjustment_params(product, warehouse, expected_on_hand: "10.000", reason: "count", unit_cost_cents: nil),
+        as: :json, headers: headers(csrf_token)
 
       expect(response).to have_http_status(:ok)
       assert_response_schema_confirm(200)
@@ -159,13 +162,13 @@ RSpec.describe "Stock adjustments API" do
       csrf_token = sign_in_and_csrf(owner)
       key = SecureRandom.uuid
 
-      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, unit_cost: nil), as: :json, headers: headers(csrf_token, key:)
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, unit_cost_cents: nil), as: :json, headers: headers(csrf_token, key:)
 
       expect(response).to have_http_status(:unprocessable_content)
       assert_response_schema_confirm(422)
-      expect(response.parsed_body.dig("error", "details", "fields")).to eq("unit_cost" => [ "required" ])
+      expect(response.parsed_body.dig("error", "details", "fields")).to eq("unit_cost_cents" => [ "required" ])
 
-      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, unit_cost: nil), as: :json, headers: headers(csrf_token, key:)
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, unit_cost_cents: nil), as: :json, headers: headers(csrf_token, key:)
       post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse), as: :json, headers: headers(csrf_token, key:)
       expect(response).to have_http_status(:created)
     end
@@ -216,6 +219,126 @@ RSpec.describe "Stock adjustments API" do
       expect(Inventory::Balance.count).to eq(0)
       set_current_tenant(organization)
       expect(Inventory::Movement.count).to eq(1)
+    end
+
+    it "answers 409 stale with the current balance when the count is based on an old observation, writing nothing" do
+      owner = create_membership(organization, role: "owner")
+      product, warehouse = stock_setup
+      csrf_token = sign_in_and_csrf(owner)
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse), as: :json, headers: headers(csrf_token)
+
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, counted_quantity: "5", expected_on_hand: "7.000", reason: "loss"),
+        as: :json, headers: headers(csrf_token)
+
+      expect(response).to have_http_status(:conflict)
+      assert_response_schema_confirm(409)
+      expect(response.parsed_body.dig("error", "code")).to eq("stale")
+      expect(response.parsed_body.dig("error", "details", "current_on_hand")).to eq("10.000")
+      set_current_tenant(organization)
+      expect(Inventory::Movement.count).to eq(1)
+    end
+
+    it "answers validation_failed when expected_on_hand is missing" do
+      owner = create_membership(organization, role: "owner")
+      product, warehouse = stock_setup
+      csrf_token = sign_in_and_csrf(owner)
+
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse).except(:expected_on_hand), as: :json,
+        headers: headers(csrf_token)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "details", "fields")).to have_key("expected_on_hand")
+    end
+
+    it "treats a request that differs only in its query string as a different request (the key is not reused across them)" do
+      owner = create_membership(organization, role: "owner")
+      product, warehouse = stock_setup
+      csrf_token = sign_in_and_csrf(owner)
+      request_headers = headers(csrf_token)
+      body = adjustment_params(product, warehouse).except(:counted_quantity)
+
+      post "/api/v1/stock_adjustments?counted_quantity=11", params: body, as: :json, headers: request_headers
+      expect(response).to have_http_status(:created)
+      post "/api/v1/stock_adjustments?counted_quantity=99", params: body, as: :json, headers: request_headers
+
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "code")).to eq("idempotency_key_reused")
+      set_current_tenant(organization)
+      expect(Inventory::Balance.sole.on_hand).to eq(BigDecimal("11"))
+    end
+
+    it "refuses a note that is not a string, and a number that went through floating point" do
+      owner = create_membership(organization, role: "owner")
+      product, warehouse = stock_setup
+      csrf_token = sign_in_and_csrf(owner)
+
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, note: { a: "b" }), as: :json, headers: headers(csrf_token)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "details", "fields")).to eq("note" => [ "invalid" ])
+
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, unit_cost_cents: 84.99999999999999999), as: :json,
+        headers: headers(csrf_token)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "details", "fields")).to eq("unit_cost_cents" => [ "not_a_number" ])
+    end
+
+    it "answers 422, not 500, for a value that does not fit" do
+      owner = create_membership(organization, role: "owner")
+      product, warehouse = stock_setup
+      csrf_token = sign_in_and_csrf(owner)
+
+      post "/api/v1/stock_adjustments",
+        params: adjustment_params(product, warehouse, counted_quantity: "999999999999", unit_cost_cents: "9999999999999"), as: :json,
+        headers: headers(csrf_token)
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "details", "fields")).to eq("unit_cost_cents" => [ "too_large" ])
+    end
+
+    it "answers 422 for a product id that is not a single value" do
+      owner = create_membership(organization, role: "owner")
+      _product, warehouse = stock_setup
+      csrf_token = sign_in_and_csrf(owner)
+
+      post "/api/v1/stock_adjustments", params: adjustment_params(Struct.new(:id).new([ 1, 2 ]), warehouse), as: :json, headers: headers(csrf_token)
+
+      expect(response).to have_http_status(:unprocessable_content)
+    end
+
+    it "does not let one user's key replay for another user" do
+      owner = create_membership(organization, role: "owner")
+      admin = create_membership(organization, role: "admin")
+      product, warehouse = stock_setup
+      key = SecureRandom.uuid
+      csrf_token = sign_in_and_csrf(owner)
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse), as: :json, headers: headers(csrf_token, key:)
+      first_id = response.parsed_body.dig("data", "movement", "id")
+
+      csrf_token = sign_in_and_csrf(admin)
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, expected_on_hand: "10.000", counted_quantity: "12", reason: "found"),
+        as: :json, headers: headers(csrf_token, key:)
+
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body.dig("data", "movement", "id")).not_to eq(first_id)
+    end
+
+    it "answers 429 past the per-user ceiling, so a loop cannot fill the ledger" do
+      owner = create_membership(organization, role: "owner")
+      product, warehouse = stock_setup
+      csrf_token = sign_in_and_csrf(owner)
+      # Invalid on purpose: cheap, and each attempt still counts against the limit.
+      bad = adjustment_params(product, warehouse, counted_quantity: "abc")
+
+      statuses = 62.times.map do
+        post "/api/v1/stock_adjustments", params: bad, as: :json, headers: headers(csrf_token)
+        response.status
+      end
+
+      expect(statuses.first(60)).to all(eq(422))
+      expect(statuses.last).to eq(429)
+      assert_response_schema_confirm(429) if response.status == 429
     end
   end
 end

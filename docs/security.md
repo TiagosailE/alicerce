@@ -105,6 +105,7 @@ Personal data map: what is held, where, why and its retention.
 | CPF or CNPJ | `catalog_partners.document_number`, encrypted at rest (deterministic, ADR 0012) | Legal identification of a customer or supplier; required to issue a purchase order, a sale, a receipt or a financial title against that party | Kept while the partner record exists; export and anonymization on request lands in Milestone 2 |
 | Partner name | `catalog_partners.name` | Identifies who is being bought from or sold to on every document | Same as above |
 | Partner email, phone | `catalog_partners.email`, `catalog_partners.phone` | Contact for purchasing, sales and finance workflows | Same as above |
+| Stock movement note | `inventory_movements.note`, free text, may contain personal data if an operator types it | Explains an adjustment to whoever reads the ledger | Kept with the ledger; erasable per movement through the owner-only function `inventory_movement_redact_note` (ADR 0016); filtered from request logs |
 | User name, email | `identity_users.name`, `identity_users.email` | Account identification and sign-in | Kept while the account exists; a user can belong to more than one organization |
 | Request IP, truncated | `audit_events.ip_prefix` (a /24 or /48, never the full address, ADR 0010) | Security investigation of an audited action | Same retention as the audit trail itself |
 

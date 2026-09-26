@@ -50,6 +50,14 @@ module Identity
       membership.present?
     end
 
+    # What stock is worth and what it cost is margin information: every role
+    # but sales sees it (finance and the owners run the books, read_only
+    # observes them, ADR 0008), so a salesperson cannot read the cost of the
+    # products they sell off a stock list.
+    def view_stock_value?(membership)
+      membership.present? && membership.role != "sales"
+    end
+
     def adjust_stock?(membership)
       return false unless membership
 
