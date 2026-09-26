@@ -12,11 +12,22 @@ module Api
       # belongs on the conflict side instead.
       CONFLICT_CODES = %w[conflict_retry invalid_transition stale].freeze
 
+      class NotScalar < StandardError
+        attr_reader :param
+
+        def initialize(param)
+          @param = param
+          super("#{param} must be a single value")
+        end
+      end
+
+      rescue_from NotScalar, with: :render_not_scalar
       rescue_from ActionController::ParameterMissing, with: :render_parameter_missing
       rescue_from ActionController::TooManyRequests, with: :render_rate_limited
       rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
       rescue_from Pundit::NotAuthorizedError, with: :render_forbidden
 
+      before_action :reject_null_bytes
       before_action :set_audit_context
       before_action :resume_session
       around_action :with_tenant_setting
@@ -41,6 +52,39 @@ module Api
       private
         # Pundit calls this to get the actor authorize and policy_scope see.
         def pundit_user = Current.user
+
+        # A query-string value the API expects to be one string. ?page[]=1 or
+        # ?q[a]=b arrive as an Array or a Parameters object and would break
+        # the query object with a NoMethodError, so they are a 422 instead.
+        def scalar_param(key)
+          value = params[key]
+          raise NotScalar, key unless value.nil? || value.is_a?(String)
+
+          value
+        end
+
+        def pagination_params
+          { page: scalar_param(:page), per_page: scalar_param(:per_page) }
+        end
+
+        # Postgres cannot store a NUL in text and the pg gem raises an
+        # ArgumentError for one anywhere in a bound value, so a request
+        # carrying one, in the query, the body or nested inside either,
+        # would answer 500. No legitimate field contains it.
+        def reject_null_bytes
+          return unless contains_null_byte?(request.parameters)
+
+          render_error(status: :unprocessable_content, code: "validation_failed", message: "Parameters must not contain null bytes")
+        end
+
+        def contains_null_byte?(value)
+          case value
+          when String then value.include?("\u0000")
+          when Hash then value.any? { |key, nested| contains_null_byte?(key) || contains_null_byte?(nested) }
+          when Array then value.any? { |nested| contains_null_byte?(nested) }
+          else false
+          end
+        end
 
         def set_audit_context
           Current.request_id = request.request_id
@@ -142,6 +186,15 @@ module Api
             code: "validation_failed",
             message: exception.message,
             details: { fields: { exception.param.to_s => [ "blank" ] } }
+          )
+        end
+
+        def render_not_scalar(exception)
+          render_error(
+            status: :unprocessable_content,
+            code: "validation_failed",
+            message: exception.message,
+            details: { fields: { exception.param.to_s => [ "invalid" ] } }
           )
         end
 

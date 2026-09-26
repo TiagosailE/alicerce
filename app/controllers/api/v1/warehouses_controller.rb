@@ -6,7 +6,7 @@ module Api
 
       def index
         authorize(Inventory::Warehouse)
-        query = Inventory::WarehousesQuery.new(policy_scope(Inventory::Warehouse), page: params[:page], per_page: params[:per_page])
+        query = Inventory::WarehousesQuery.new(policy_scope(Inventory::Warehouse), **pagination_params)
         render json: { data: query.results.map { |warehouse| Inventory::WarehouseSerializer.new(warehouse).as_json }, meta: query.meta }
       end
 

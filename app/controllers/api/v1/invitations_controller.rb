@@ -6,7 +6,7 @@ module Api
 
       def index
         authorize(Identity::Invitation)
-        query = Identity::PendingInvitationsQuery.new(policy_scope(Identity::Invitation), page: params[:page], per_page: params[:per_page])
+        query = Identity::PendingInvitationsQuery.new(policy_scope(Identity::Invitation), **pagination_params)
         render json: { data: query.results.map { |invitation| Identity::PendingInvitationSerializer.new(invitation).as_json }, meta: query.meta }
       end
 

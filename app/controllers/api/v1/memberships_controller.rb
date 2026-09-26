@@ -6,7 +6,7 @@ module Api
 
       def index
         authorize(Identity::Membership)
-        query = Identity::MembersQuery.new(policy_scope(Identity::Membership), page: params[:page], per_page: params[:per_page])
+        query = Identity::MembersQuery.new(policy_scope(Identity::Membership), **pagination_params)
         render json: { data: query.results.map { |membership| Identity::MemberSerializer.new(membership).as_json }, meta: query.meta }
       end
 
