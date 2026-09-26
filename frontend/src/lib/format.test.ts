@@ -21,6 +21,9 @@ describe("parseDecimalInput", () => {
     ["1000.5", "1000.5"],
     ["  12  ", "12"],
     ["1.0000004", "1.0000004"],
+    ["0.500", "0.500"],
+    ["0.001", "0.001"],
+    ["10.500", "10500"],
   ])("reads %s as %s", (typed, expected) => {
     expect(parseDecimalInput(typed)).toBe(expected);
   });

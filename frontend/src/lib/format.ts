@@ -8,13 +8,16 @@ export function formatQuantity(value: string): string {
 /** Turns what a pt-BR user typed into the API's decimal string (ADR 0006),
  * by text rules only, never arithmetic. A comma is the decimal separator. A
  * dot followed by exactly three digits is a thousands separator, the way
- * the screens show "1.000"; any other dot is a decimal point ("2.5").
+ * the screens show "1.000", unless the number starts with a zero ("0.500");
+ * any other dot is a decimal point ("2.5").
  * Returns null for anything that is not a number. */
 export function parseDecimalInput(text: string): string | null {
   const value = text.replace(/\s/g, "");
   if (/^\d+$/.test(value)) return value;
   if (/^\d+,\d+$/.test(value)) return value.replace(",", ".");
-  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(value)) return value.replaceAll(".", "").replace(",", ".");
+  // A group of thousands never starts with a zero: "0.500" is half, not 500.
+  if (/^[1-9]\d{0,2}(\.\d{3})+(,\d+)?$/.test(value))
+    return value.replaceAll(".", "").replace(",", ".");
   if (/^\d+\.\d+$/.test(value)) return value;
   return null;
 }

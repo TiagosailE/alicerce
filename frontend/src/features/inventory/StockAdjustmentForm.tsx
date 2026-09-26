@@ -1,4 +1,12 @@
-import { type ChangeEvent, type RefObject, type SubmitEvent, useId, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type RefObject,
+  type SubmitEvent,
+  useDeferredValue,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
@@ -12,7 +20,7 @@ import {
   reaisToCents,
 } from "../../lib/format";
 import { type MessageKey, t, tf } from "../../i18n";
-import type { Product } from "../catalog/api";
+import { type Product, useProductOptions } from "../catalog/api";
 import { type AdjustmentReason, type Warehouse, useAdjustStock, useObservedBalance } from "./api";
 import { ADJUSTMENT_REASONS, REASON_KEYS } from "./stockLabels";
 
@@ -83,18 +91,18 @@ const inputClass =
  * an increase cost. The API works out the difference under the balance lock;
  * the screen never computes a quantity or an amount. */
 export function StockAdjustmentForm({
-  products,
   warehouses,
   onClose,
   productSelectRef,
 }: {
-  products: Product[];
   warehouses: Warehouse[];
   onClose: () => void;
   productSelectRef?: RefObject<HTMLSelectElement | null>;
 }) {
   const adjust = useAdjustStock();
-  const [productId, setProductId] = useState("");
+  const [productQuery, setProductQuery] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const productId = selectedProduct ? String(selectedProduct.id) : "";
   const [warehouseId, setWarehouseId] = useState(
     warehouses.length === 1 && warehouses[0] ? String(warehouses[0].id) : "",
   );
@@ -117,13 +125,20 @@ export function StockAdjustmentForm({
   const costId = useId();
   const noteId = useId();
 
-  const selectedProduct = products.find((product) => String(product.id) === productId);
+  const productOptions = useProductOptions(useDeferredValue(productQuery.trim()));
+  const found = productOptions.data?.data ?? [];
+  // The chosen product stays in the list however the search changes after it.
+  const products =
+    selectedProduct && !found.some((product) => product.id === selectedProduct.id)
+      ? [selectedProduct, ...found]
+      : found;
   const pairChosen = productId !== "" && warehouseId !== "";
   const observed = useObservedBalance(
     productId ? Number(productId) : undefined,
     warehouseId ? Number(warehouseId) : undefined,
   );
   const unit = selectedProduct?.stock_unit.code ?? "";
+  const countedPreview = counted.trim() ? parseDecimalInput(counted) : null;
 
   const fieldErrors = adjust.isError ? apiFieldErrors(adjust.error) : {};
   const countedError =
@@ -210,12 +225,9 @@ export function StockAdjustmentForm({
               ? tf("stock.adjustedSummary", {
                   quantity: formatSignedQuantity(movement.quantity),
                   unit: code,
-                  value:
-                    movement.value_cents === null
-                      ? ""
-                      : tf("stock.adjustedValuePart", {
-                          value: formatMoneyCents(movement.value_cents),
-                        }),
+                  value: tf("stock.adjustedValuePart", {
+                    value: formatMoneyCents(movement.value_cents),
+                  }),
                   onHand: formatQuantity(balance.on_hand),
                 })
               : t("stock.adjustedNoDifference"),
@@ -233,6 +245,22 @@ export function StockAdjustmentForm({
     <form onSubmit={submit} noValidate className="max-w-3xl">
       <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
+          <label
+            htmlFor={`${productFieldId}-search`}
+            className="mb-1 block text-sm font-medium text-text"
+          >
+            {t("stock.productSearchLabel")}
+          </label>
+          <input
+            id={`${productFieldId}-search`}
+            type="search"
+            placeholder={t("stock.productSearchPlaceholder")}
+            value={productQuery}
+            onChange={(event) => {
+              setProductQuery(event.target.value);
+            }}
+            className={`${inputClass} mb-2`}
+          />
           <label htmlFor={productFieldId} className="mb-1 block text-sm font-medium text-text">
             {t("stock.fieldProduct")}
           </label>
@@ -241,7 +269,13 @@ export function StockAdjustmentForm({
             ref={productSelectRef}
             required
             value={productId}
-            onChange={changed(setProductId)}
+            onChange={(event) => {
+              setSelectedProduct(
+                products.find((product) => String(product.id) === event.target.value) ?? null,
+              );
+              if (adjust.isError) adjust.reset();
+            }}
+            aria-describedby={`${productFieldId}-note`}
             className={inputClass}
           >
             <option value="" disabled>
@@ -254,6 +288,33 @@ export function StockAdjustmentForm({
               </option>
             ))}
           </select>
+          <p
+            id={`${productFieldId}-note`}
+            className="mt-1 text-xs text-text-muted"
+            aria-live="polite"
+          >
+            {productOptions.isError && (
+              <>
+                {t("stock.productsLoadError")}{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    void productOptions.refetch();
+                  }}
+                  className="text-accent underline underline-offset-2"
+                >
+                  {t("stock.observedRetry")}
+                </button>
+              </>
+            )}
+            {productOptions.data && found.length === 0 && t("stock.productsEmpty")}
+            {productOptions.data &&
+              productOptions.data.meta.total > found.length &&
+              tf("stock.productsTruncated", {
+                shown: String(found.length),
+                total: String(productOptions.data.meta.total),
+              })}
+          </p>
         </div>
         <div>
           <label htmlFor={warehouseFieldId} className="mb-1 block text-sm font-medium text-text">
@@ -295,6 +356,7 @@ export function StockAdjustmentForm({
             aria-invalid={countedError ? true : undefined}
             aria-describedby={[
               countedError ? `${countedId}-error` : null,
+              `${countedId}-echo`,
               `${countedId}-observed`,
               `${countedId}-hint`,
             ]
@@ -304,6 +366,12 @@ export function StockAdjustmentForm({
           />
           <p id={`${countedId}-hint`} className="mt-1 text-xs text-text-muted">
             {t("stock.fieldCountedHint")}
+          </p>
+          <p id={`${countedId}-echo`} className="num mt-1 text-xs text-text">
+            {countedPreview !== null &&
+              tf("stock.fieldCountedEcho", {
+                value: `${formatQuantity(countedPreview)} ${unit}`.trim(),
+              })}
           </p>
           <p id={`${countedId}-observed`} className="num mt-1 text-xs text-text" aria-live="polite">
             {!pairChosen && t("stock.observedPrompt")}

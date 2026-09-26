@@ -100,15 +100,18 @@ export function useProducts(page: number, filters: ProductFilters = {}) {
 }
 
 /** Products for a picker, inactive ones included (a discontinued product can
- * still hold stock to count or write off). A distributor's catalog fits one
- * page of 100 today; a search box replaces this before it does not. Fetched
- * only when `enabled`, so a screen that has not opened the picker pays nothing. */
-export function useProductOptions(enabled: boolean) {
+ * still hold stock to count or write off), narrowed by a server-side search on
+ * name and sku. The answer says how many matched in total, so a picker that
+ * shows only the first page can tell the person to refine the search instead of
+ * silently hiding the rest. */
+export function useProductOptions(q: string) {
   return useQuery({
-    queryKey: ["catalog", "products", "options"],
-    enabled,
+    queryKey: ["catalog", "products", "options", q],
     queryFn: async () =>
-      unwrapList<Product>(await api.GET("/products", { params: { query: { per_page: 100 } } })),
+      unwrapList<Product>(
+        await api.GET("/products", { params: { query: { per_page: 50, q: q || undefined } } }),
+      ),
+    placeholderData: keepPreviousData,
   });
 }
 
