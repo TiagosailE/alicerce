@@ -17,6 +17,7 @@ import {
 } from "./features/purchasing/PurchaseOrderFormScreen";
 import { PurchaseOrderDetailScreen } from "./features/purchasing/PurchaseOrderDetailScreen";
 import { PurchaseOrdersScreen } from "./features/purchasing/PurchaseOrdersScreen";
+import { PayablesScreen } from "./features/finance/PayablesScreen";
 import { ReceiptDetailScreen } from "./features/purchasing/ReceiptDetailScreen";
 import { ReceiptsScreen } from "./features/purchasing/ReceiptsScreen";
 import { ReceiveGoodsScreen } from "./features/purchasing/ReceiveGoodsScreen";
@@ -127,6 +128,7 @@ export function App() {
               userName={user.name}
               canManageMembers={canManageMembers}
               canViewPurchasing={canViewPurchasing}
+              canViewPayables={canViewPayables}
             >
               <Routes>
                 <Route path="/" element={<HomeScreen userName={user.name} />} />
@@ -196,6 +198,9 @@ export function App() {
                       element={<ReceiptDetailScreen canViewPayables={canViewPayables} />}
                     />
                   </>
+                )}
+                {canViewPayables && (
+                  <Route path="/financeiro/contas-a-pagar" element={<PayablesScreen />} />
                 )}
                 <Route
                   path="/parceiros"

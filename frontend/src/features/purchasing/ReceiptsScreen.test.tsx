@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFetchMock, errorEnvelope, listResponse } from "../../test/api";
+import { createFetchMock, errorEnvelope, jsonResponse, listResponse } from "../../test/api";
 import { cellText, nth } from "../../test/dom";
 import { ReceiptsScreen } from "./ReceiptsScreen";
 import { receiptSummary } from "./testData";
@@ -167,6 +167,28 @@ describe("ReceiptsScreen", () => {
 
     expect(await screen.findByText("Ainda não há recebimentos.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Ver pedidos" })).not.toBeInTheDocument();
+  });
+
+  it("says a page past the last one is gone, not that there are no receipts, and leads to the first", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /receipts": (request) =>
+          new URL(request.url).searchParams.get("page") === "5"
+            ? jsonResponse({ data: [], meta: { page: 5, per_page: 25, total: 30 } })
+            : listResponse([receiptSummary()]),
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen(true, "/recebimentos?page=5");
+
+    expect(await screen.findByText("Esta página não existe mais.")).toBeInTheDocument();
+    expect(screen.queryByText(/Ainda não há recebimentos/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Ir para a primeira página" }));
+
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(screen.getByLabelText("endereço")).toBeEmptyDOMElement();
+    expect(screen.queryByText("Esta página não existe mais.")).not.toBeInTheDocument();
   });
 
   it("shows a load error with a retry", async () => {

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { AppShell } from "./AppShell";
 
-function renderAt(path: string) {
+function renderAt(path: string, canViewPayables = false) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter initialEntries={[path]}>
@@ -13,6 +13,7 @@ function renderAt(path: string) {
           userName="Marina Costa"
           canManageMembers={false}
           canViewPurchasing
+          canViewPayables={canViewPayables}
         >
           <p>conteúdo</p>
         </AppShell>
@@ -35,5 +36,20 @@ describe("AppShell", () => {
     renderAt("/parceiros");
 
     expect(screen.getByRole("link", { name: "Compras" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("offers Contas a pagar only to a role that reads payables, and marks it on its page", () => {
+    renderAt("/financeiro/contas-a-pagar", true);
+
+    expect(screen.getByRole("link", { name: "Contas a pagar" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("leaves Contas a pagar out for a role that cannot read payables", () => {
+    renderAt("/compras", false);
+
+    expect(screen.queryByRole("link", { name: "Contas a pagar" })).not.toBeInTheDocument();
   });
 });
