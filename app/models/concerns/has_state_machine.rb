@@ -29,13 +29,18 @@ module HasStateMachine
     validate :status_changes_only_through_a_transition, on: :update
   end
 
+  # Where the record is according to the database, not to an unsaved assignment:
+  # `order.status = "received"; order.transition_to!(:cancelled)` must be judged
+  # from what is stored.
+  def current_status = persisted? ? status_in_database : status
+
   def can_transition_to?(next_status)
-    self.class::TRANSITIONS.fetch(status, []).include?(next_status.to_s)
+    self.class::TRANSITIONS.fetch(current_status, []).include?(next_status.to_s)
   end
 
   def transition_to!(next_status, **attributes)
     next_status = next_status.to_s
-    raise InvalidTransition.new(self, status, next_status) unless can_transition_to?(next_status)
+    raise InvalidTransition.new(self, current_status, next_status) unless can_transition_to?(next_status)
 
     assign_attributes(attributes)
     @transitioning = true

@@ -2,6 +2,7 @@ module Api
   module V1
     module PurchaseOrders
       class CancellationsController < BaseController
+        include PurchasingWriteLimits
         before_action :require_authentication!
         before_action :verify_csrf_token!
 

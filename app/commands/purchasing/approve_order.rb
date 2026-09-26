@@ -3,8 +3,12 @@ module Purchasing
   # edit made between their read and their click is refused as stale instead of
   # approved unseen (ADR 0015). Approval checks that the order can ever be
   # received (lines, prices, an active supplier and products with a conversion,
-  # amounts within the cap) and copies each product and factor again from now,
-  # which is what freezes them.
+  # amounts within the cap) and copies the supplier's and each product's
+  # descriptive data again, which is what freezes them. It never changes what
+  # the approver saw in money: if a product's purchase unit or factor changed
+  # since the draft was saved, the approval is refused (fields
+  # "lines.N.conversion" => ["changed"]) and saving the draft again refreshes the
+  # copy, bumps the revision and shows the approver the new terms.
   #
   # Error codes: :validation_failed, :stale, :invalid_transition, :conflict_retry.
   class ApproveOrder
@@ -44,11 +48,16 @@ module Purchasing
         return Result.failure(:validation_failed, fields:) if fields.any?
 
         lines.each(&:save!)
+        Purchasing::OrderRules.copy_supplier(order, order.supplier)
         order.total_cents = Purchasing::OrderRules.total_cents(lines)
         order.transition_to!(:approved, approved_at: Time.current, approved_by_user: @actor, revision: order.revision + 1)
         Audit.record("purchase_order_approved", order, actor: @actor,
           changes: { number: order.number, status: { from: "draft", to: "approved" }, total_cents: order.total_cents })
         Result.success(order)
+      end
+
+      def conversion_changed?(line, conversion)
+        conversion.purchase_unit_id != line.purchase_unit_id || conversion.factor != line.factor
       end
 
       def refresh(line, index, fields)
@@ -57,6 +66,8 @@ module Purchasing
           (fields["lines.#{index}.product_id"] ||= []) << "inactive"
         elsif product.unit_conversion.nil?
           (fields["lines.#{index}.product_id"] ||= []) << "conversion_missing"
+        elsif conversion_changed?(line, product.unit_conversion)
+          (fields["lines.#{index}.conversion"] ||= []) << "changed"
         else
           line.copy_from(product)
         end

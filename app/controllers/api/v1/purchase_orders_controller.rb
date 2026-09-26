@@ -1,6 +1,7 @@
 module Api
   module V1
     class PurchaseOrdersController < BaseController
+      include PurchasingWriteLimits
       before_action :require_authentication!
       before_action :verify_csrf_token!, only: %i[create update]
 
@@ -23,7 +24,7 @@ module Api
         authorize(Purchasing::Order)
         result = Purchasing::CreateOrder.call(
           organization: Current.organization, actor: Current.user, supplier: find_supplier,
-          lines: params[:lines], note: params[:note], **term_params
+          lines: params[:lines], note: scalar_param(:note), **term_params
         )
         return render_result_error(result) unless result.success?
 
@@ -35,7 +36,7 @@ module Api
         authorize(order)
         result = Purchasing::UpdateOrder.call(
           order:, actor: Current.user, revision: revision_param, supplier: find_supplier,
-          lines: params[:lines], note: params[:note], **term_params
+          lines: params[:lines], note: scalar_param(:note), **term_params
         )
         return render_result_error(result) unless result.success?
 
@@ -55,13 +56,13 @@ module Api
         end
 
         # A term the client did not send takes its default; one that is not a
-        # whole number is passed on as sent and refused by the model.
+        # plain whole number is passed on as sent and refused by the model.
         def integer_param(key, default)
           value = params[key]
-          value.nil? ? default : (Integer(value, exception: false) || value)
+          value.nil? ? default : (IntegerString.parse(value) || value)
         end
 
-        def revision_param = Integer(params.expect(:revision), exception: false)
+        def revision_param = IntegerString.parse(params.expect(:revision))
 
         def render_order(order, status: :ok)
           personal = policy(order).view_personal_data?

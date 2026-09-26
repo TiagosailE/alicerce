@@ -36,4 +36,12 @@ RSpec.describe HasStateMachine do
     expect { probe.transition_to!(:done, note: "skipped") }.to raise_error(HasStateMachine::InvalidTransition, /"draft" to "done"/)
     expect(probe.reload).to have_attributes(status: "draft", note: nil)
   end
+
+  it "judges a transition from what is stored, not from an unsaved assignment" do
+    probe = StateMachineProbe.create!
+    probe.status = "approved" # in memory only: draft -> done is not in the table, approved -> done is
+
+    expect { probe.transition_to!(:done) }.to raise_error(HasStateMachine::InvalidTransition, /"draft" to "done"/)
+    expect(probe.reload.status).to eq("draft")
+  end
 end

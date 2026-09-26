@@ -137,6 +137,38 @@ CREATE FUNCTION public.invitation_organization_id(target_token_digest character 
 $$;
 
 
+--
+-- Name: purchasing_order_lines_freeze(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.purchasing_order_lines_freeze() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  parent_status text;
+BEGIN
+  SELECT status INTO parent_status FROM purchasing_orders
+    WHERE id = (CASE WHEN TG_OP = 'INSERT' THEN NEW.order_id ELSE OLD.order_id END);
+
+  IF parent_status IS DISTINCT FROM 'draft' THEN
+    IF TG_OP <> 'UPDATE' THEN
+      RAISE EXCEPTION 'lines of a purchase order that is not a draft cannot be % (order status: %)', lower(TG_OP), parent_status;
+    END IF;
+
+    IF (NEW.order_id, NEW.position, NEW.product_id, NEW.purchase_unit_id, NEW.factor, NEW.quantity, NEW.unit_price_cents,
+        NEW.discount_bp, NEW.gross_cents, NEW.discount_cents, NEW.net_cents)
+       IS DISTINCT FROM
+       (OLD.order_id, OLD.position, OLD.product_id, OLD.purchase_unit_id, OLD.factor, OLD.quantity, OLD.unit_price_cents,
+        OLD.discount_bp, OLD.gross_cents, OLD.discount_cents, OLD.net_cents) THEN
+      RAISE EXCEPTION 'the lines of a purchase order that is not a draft are frozen (order status: %)', parent_status;
+    END IF;
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -772,12 +804,16 @@ CREATE TABLE public.purchasing_order_lines (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT purchasing_order_lines_amounts_consistent CHECK (((gross_cents >= 0) AND (discount_cents >= 0) AND (discount_cents <= gross_cents) AND (net_cents = (gross_cents - discount_cents)))),
+    CONSTRAINT purchasing_order_lines_discount_follows_bp CHECK (((discount_cents)::numeric = round((((gross_cents)::numeric * (discount_bp)::numeric) / (10000)::numeric)))),
     CONSTRAINT purchasing_order_lines_discount_range CHECK (((discount_bp >= 0) AND (discount_bp <= 10000))),
     CONSTRAINT purchasing_order_lines_factor_positive CHECK ((factor > (0)::numeric)),
     CONSTRAINT purchasing_order_lines_gross_cap CHECK ((gross_cents <= '1000000000000000'::bigint)),
+    CONSTRAINT purchasing_order_lines_gross_follows_price CHECK (((gross_cents)::numeric = round((quantity * (unit_price_cents)::numeric)))),
     CONSTRAINT purchasing_order_lines_price_not_negative CHECK ((unit_price_cents >= 0)),
     CONSTRAINT purchasing_order_lines_quantity_positive CHECK ((quantity > (0)::numeric)),
-    CONSTRAINT purchasing_order_lines_received_within_line CHECK ((((received_quantity >= (0)::numeric) AND (received_quantity <= quantity)) AND (received_stock_quantity >= (0)::numeric) AND ((received_gross_cents >= 0) AND (received_gross_cents <= gross_cents)) AND ((received_discount_cents >= 0) AND (received_discount_cents <= discount_cents))))
+    CONSTRAINT purchasing_order_lines_received_stock_within_line CHECK ((received_stock_quantity <= round((quantity * factor), 3))),
+    CONSTRAINT purchasing_order_lines_received_within_line CHECK ((((received_quantity >= (0)::numeric) AND (received_quantity <= quantity)) AND (received_stock_quantity >= (0)::numeric) AND ((received_gross_cents >= 0) AND (received_gross_cents <= gross_cents)) AND ((received_discount_cents >= 0) AND (received_discount_cents <= discount_cents)) AND (received_discount_cents <= received_gross_cents))),
+    CONSTRAINT purchasing_order_lines_stock_quantity_fits CHECK ((round((quantity * factor), 3) < ('1000000000000'::bigint)::numeric))
 );
 
 
@@ -2549,6 +2585,13 @@ CREATE TRIGGER inventory_movements_append_only BEFORE DELETE OR UPDATE ON public
 --
 
 CREATE TRIGGER inventory_movements_no_truncate BEFORE TRUNCATE ON public.inventory_movements FOR EACH STATEMENT EXECUTE FUNCTION public.inventory_movements_no_truncate();
+
+
+--
+-- Name: purchasing_order_lines purchasing_order_lines_freeze; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER purchasing_order_lines_freeze BEFORE INSERT OR DELETE OR UPDATE ON public.purchasing_order_lines FOR EACH ROW EXECUTE FUNCTION public.purchasing_order_lines_freeze();
 
 
 --
