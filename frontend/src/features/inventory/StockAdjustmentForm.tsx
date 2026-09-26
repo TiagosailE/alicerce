@@ -11,6 +11,7 @@ import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
 import { apiFieldErrors, fieldErrorMessage, requestIdSuffix } from "../../lib/errors";
+import { keepsAttempt, newIdempotencyKey } from "../../lib/idempotency";
 import {
   formatMoneyCents,
   formatQuantity,
@@ -51,18 +52,11 @@ const FIELD_ERROR_KEYS: Record<string, Partial<Record<string, MessageKey>>> = {
  * goes to the banner instead of being swallowed. */
 const RENDERED_FIELDS = new Set(Object.keys(FIELD_ERROR_KEYS));
 
-function newIdempotencyKey(): string {
-  return globalThis.crypto.randomUUID();
-}
-
-/** ADR 0005: the key survives what a retry can safely repeat (no answer at
- * all, a server error, a lock conflict) and is replaced after any answer that
- * means "this attempt is over". A stale count is such an answer: the operator
- * has to look at the new balance, so the next count is a new intent. */
-function keepsAttempt(error: unknown): boolean {
-  if (!(error instanceof ApiError)) return true;
-  if (error.code === "stale") return false;
-  return error.status >= 500 || error.status === 409;
+/** A stale count ends the attempt even though it is a 409: the operator has to
+ * look at the new balance, so the next count is a new intent (ADR 0005). */
+function keepsCountAttempt(error: unknown): boolean {
+  if (error instanceof ApiError && error.code === "stale") return false;
+  return keepsAttempt(error);
 }
 
 function bannerMessage(error: unknown): string {
@@ -235,7 +229,7 @@ export function StockAdjustmentForm({
           countedRef.current?.focus();
         },
         onError: (error) => {
-          if (!keepsAttempt(error)) attempt.current = null;
+          if (!keepsCountAttempt(error)) attempt.current = null;
         },
       },
     );

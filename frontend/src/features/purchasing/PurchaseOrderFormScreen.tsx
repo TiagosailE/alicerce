@@ -11,7 +11,7 @@ import {
   useUpdatePurchaseOrder,
 } from "./api";
 import { emptyOrderValues, orderToValues, PurchaseOrderForm } from "./PurchaseOrderForm";
-import { orderIdFromParam, SAVED_STATE } from "./purchasingLabels";
+import { idFromParam, SAVED_STATE } from "./purchasingLabels";
 
 const linkClass = "text-sm text-accent underline-offset-2 hover:underline";
 
@@ -84,7 +84,7 @@ function EditDraftForm({ order, onReload }: { order: PurchaseOrder; onReload: ()
  * meantime answers stale, and the form offers to reload what is stored now. */
 export function EditPurchaseOrderScreen() {
   const { id } = useParams<{ id: string }>();
-  const orderId = orderIdFromParam(id);
+  const orderId = idFromParam(id);
   const order = usePurchaseOrder(orderId);
   // Remounts the form with the reloaded order, since it keeps its own state.
   const [formKey, setFormKey] = useState(0);

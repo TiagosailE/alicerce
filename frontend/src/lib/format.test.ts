@@ -9,6 +9,8 @@ import {
   centsToReaisInput,
   formatBasisPoints,
   formatDate,
+  dayInZone,
+  isZeroDecimal,
   percentToBasisPoints,
   reaisToCents,
   toDecimalInput,
@@ -170,5 +172,30 @@ describe("what the price and discount fields show when an order is edited", () =
   ])("shows %i basis points as %s percent and reads back the same", (basisPoints, shown) => {
     expect(basisPointsToPercentInput(basisPoints)).toBe(shown);
     expect(percentToBasisPoints(shown)).toBe(String(basisPoints));
+  });
+});
+
+describe("dayInZone", () => {
+  it("reads the day an instant falls on in the zone asked for, not in the machine's", () => {
+    // 01:30 UTC is still the evening of the 26th in Bahia (UTC-3).
+    const instant = "2026-09-27T01:30:00Z";
+
+    expect(dayInZone(instant, "UTC")).toBe("2026-09-27");
+    expect(dayInZone(instant, "America/Bahia")).toBe("2026-09-26");
+    expect(dayInZone(instant, "Asia/Tokyo")).toBe("2026-09-27");
+  });
+
+  it("accepts a Date and pads the month and the day", () => {
+    expect(dayInZone(new Date("2026-01-05T12:00:00Z"), "UTC")).toBe("2026-01-05");
+  });
+});
+
+describe("isZeroDecimal", () => {
+  it.each(["0", "00", "0.0", "0.000"])("reads %s as zero", (value) => {
+    expect(isZeroDecimal(value)).toBe(true);
+  });
+
+  it.each(["1", "0.001", "10", "0.5", "", "abc"])("does not read %s as zero", (value) => {
+    expect(isZeroDecimal(value)).toBe(false);
   });
 });

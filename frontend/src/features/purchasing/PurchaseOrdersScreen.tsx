@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button, buttonClass } from "../../components/ui/Button";
 import { PaginationControls } from "../../components/ui/PaginationControls";
@@ -9,6 +9,7 @@ import { t, tf } from "../../i18n";
 import { usePurchaseOrders } from "./api";
 import { OrderStatusBadge } from "./OrderStatusBadge";
 import { ORDER_STATUSES, STATUS_KEYS } from "./purchasingLabels";
+import { PurchasingTabs } from "./PurchasingTabs";
 
 const selectClass =
   "h-9 rounded-md border border-border-strong bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-focus";
@@ -30,6 +31,7 @@ export function PurchaseOrdersScreen({ canManage }: { canManage: boolean }) {
   const orders = usePurchaseOrders(page, { status, q: q.trim() || undefined });
   const statusId = useId();
   const searchId = useId();
+  const searchRef = useRef<HTMLInputElement>(null);
   const filtered = status !== undefined || q.trim() !== "";
 
   function change(next: { page?: number; status?: string; q?: string }) {
@@ -45,7 +47,7 @@ export function PurchaseOrdersScreen({ canManage }: { canManage: boolean }) {
 
   return (
     <div>
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <h1 className="font-display text-2xl text-text">{t("purchasing.title")}</h1>
         {canManage && (
           <Link to="/compras/novo" className={buttonClass("primary")}>
@@ -53,6 +55,7 @@ export function PurchaseOrdersScreen({ canManage }: { canManage: boolean }) {
           </Link>
         )}
       </div>
+      <PurchasingTabs />
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
@@ -80,6 +83,7 @@ export function PurchaseOrdersScreen({ canManage }: { canManage: boolean }) {
             {t("purchasing.searchLabel")}
           </label>
           <input
+            ref={searchRef}
             id={searchId}
             type="search"
             placeholder={t("purchasing.searchPlaceholder")}
@@ -123,6 +127,7 @@ export function PurchaseOrdersScreen({ canManage }: { canManage: boolean }) {
               <Button
                 onClick={() => {
                   change({ page: 1, status: "", q: "" });
+                  searchRef.current?.focus();
                 }}
               >
                 {t("purchasing.clearFilters")}

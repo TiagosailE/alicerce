@@ -1,4 +1,10 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { ApiError, api, csrfHeader, unwrap, unwrapList } from "../../api/client";
 import type { components } from "../../api/schema";
 
@@ -65,7 +71,7 @@ export type StockBalance = components["schemas"]["StockBalance"];
 export type StockMovement = components["schemas"]["StockMovement"];
 export type AdjustmentReason = components["schemas"]["AdjustmentReason"];
 
-const stockKey = ["inventory", "stock"] as const;
+export const stockKey = ["inventory", "stock"] as const;
 
 export interface StockBalanceFilters {
   warehouseId?: number;
@@ -111,13 +117,31 @@ export function useStockMovements(page: number, filters: StockMovementFilters = 
   });
 }
 
+const warehouseOptionsQuery = {
+  queryKey: [...warehousesListKey, "options"],
+  queryFn: async () =>
+    unwrapList<Warehouse>(await api.GET("/warehouses", { params: { query: { per_page: 100 } } })),
+};
+
 /** Every warehouse, for a picker: an organization has a handful. */
 export function useWarehouseOptions() {
+  return useQuery(warehouseOptionsQuery);
+}
+
+/** The warehouses a document can be posted to: the active ones, from the same
+ * request as the picker above, so a warehouse deactivated meanwhile drops out
+ * of both when either is refreshed. */
+export function useActiveWarehouses(enabled = true) {
   return useQuery({
-    queryKey: [...warehousesListKey, "options"],
-    queryFn: async () =>
-      unwrapList<Warehouse>(await api.GET("/warehouses", { params: { query: { per_page: 100 } } })),
+    ...warehouseOptionsQuery,
+    enabled,
+    select: (list) => list.data.filter((warehouse) => warehouse.active),
   });
+}
+
+/** Look at the warehouses again, for a screen that was told one is inactive. */
+export function refreshWarehouses(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: warehousesListKey });
 }
 
 /** What the balance of one product in one warehouse holds right now, as the

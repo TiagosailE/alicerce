@@ -121,6 +121,23 @@ export function formatDate(isoDate: string): string {
   return `${day}/${month}/${year}`;
 }
 
+/** The calendar day an instant falls on in a time zone, as "2026-09-26". The
+ * API judges a day by the organization's zone, not the browser's, so a date
+ * field starts from, and is limited by, the same day the API will use. */
+export function dayInZone(instant: Date | string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(typeof instant === "string" ? new Date(instant) : instant);
+}
+
+/** Whether a decimal string ("0", "0.000") is zero, read from its digits. */
+export function isZeroDecimal(value: string): boolean {
+  return /^0+(\.0+)?$/.test(value);
+}
+
 /** Whole cents from the API (3250) as what the price field takes ("32,50"),
  * by placing the comma in the text, ungrouped so it reads back unambiguously
  * through reaisToCents. */

@@ -16,7 +16,14 @@ import {
 import { t, tf } from "../../i18n";
 import { useApprovePurchaseOrder, useCancelPurchaseOrder, usePurchaseOrder } from "./api";
 import { OrderStatusBadge } from "./OrderStatusBadge";
-import { canCancel, orderIdFromParam, statusNote, termsText, wasSaved } from "./purchasingLabels";
+import {
+  canCancel,
+  canReceive,
+  idFromParam,
+  statusNote,
+  termsText,
+  wasSaved,
+} from "./purchasingLabels";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -56,9 +63,15 @@ function cancelMessage(error: unknown): string {
 /** A purchase order as a document (ADR 0017): the header and the lines exactly
  * as the API stored them, and the actions its state allows. What the state
  * allows is read from the status the API sent, never worked out here. */
-export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean }) {
+export function PurchaseOrderDetailScreen({
+  canManage,
+  canViewPayables,
+}: {
+  canManage: boolean;
+  canViewPayables: boolean;
+}) {
   const { id } = useParams<{ id: string }>();
-  const orderId = orderIdFromParam(id);
+  const orderId = idFromParam(id);
   const order = usePurchaseOrder(orderId);
   const approve = useApprovePurchaseOrder();
   const cancel = useCancelPurchaseOrder();
@@ -134,6 +147,16 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
             <OrderStatusBadge status={current.status} />
           </div>
           <p className="mb-4 text-sm text-text-muted">{t(statusNote(current.status, canManage))}</p>
+          {current.status !== "draft" && (
+            <p className="mb-4">
+              <Link
+                to={`/recebimentos?order=${String(current.id)}`}
+                className="text-sm text-accent underline-offset-2 hover:underline"
+              >
+                {t("purchasing.linkReceipts")}
+              </Link>
+            </p>
+          )}
 
           {canManage && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -168,6 +191,14 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
                   </Button>
                 </>
               )}
+              {canReceive(current.status) && (
+                <Link
+                  to={`/compras/${String(current.id)}/receber`}
+                  className={buttonClass("primary")}
+                >
+                  {t("purchasing.actionReceive")}
+                </Link>
+              )}
               {canCancel(current.status) && (
                 <Button
                   ref={cancelTriggerRef}
@@ -198,7 +229,9 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
               <p id={cancelBodyId} className="mb-3 text-sm text-text-muted">
                 {current.status === "draft"
                   ? t("purchasing.cancelConfirmBodyDraft")
-                  : t("purchasing.cancelConfirmBody")}
+                  : canViewPayables
+                    ? t("purchasing.cancelConfirmBody")
+                    : t("purchasing.cancelConfirmBodyNoPayables")}
               </p>
               <div className="flex gap-2">
                 <Button
