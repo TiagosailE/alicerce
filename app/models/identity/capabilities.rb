@@ -84,6 +84,13 @@ module Identity
       %w[owner admin purchasing].include?(membership.role)
     end
 
+    # ADR 0017: payables are titles, which the people who run the books read:
+    # owner, admin, finance and read_only. Purchasing creates the receipt that
+    # opens one but does not read what the organization owes; sales has no access.
+    def view_payables?(membership)
+      membership.present? && %w[owner admin finance read_only].include?(membership.role)
+    end
+
     # ADR 0014: the full CPF, e-mail and phone of a partner are personal
     # data, so read_only sees them masked or absent; every role that works
     # with customers and suppliers sees them.

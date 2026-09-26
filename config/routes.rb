@@ -19,8 +19,11 @@ Rails.application.routes.draw do
         scope module: :purchase_orders do
           resource :approval, only: :create
           resource :cancellation, only: :create
+          resources :receipts, only: :create
         end
       end
+      resources :receipts, only: %i[index show]
+      resources :payables, only: :index
       resources :invitations, only: %i[create index destroy]
       # The token is the credential; it travels in the body, never the URL
       # (a security review of the password reset routes below found that

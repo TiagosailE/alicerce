@@ -169,6 +169,38 @@ END;
 $$;
 
 
+--
+-- Name: purchasing_receipts_append_only(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.purchasing_receipts_append_only() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_user <> (SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = TG_TABLE_NAME) THEN
+    RAISE EXCEPTION '% is append-only: % is not permitted for %', TG_TABLE_NAME, TG_OP, current_user;
+  END IF;
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+
+--
+-- Name: purchasing_receipts_no_truncate(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.purchasing_receipts_no_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_user <> (SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = TG_TABLE_NAME) THEN
+    RAISE EXCEPTION '% is append-only: TRUNCATE is not permitted for %', TG_TABLE_NAME, current_user;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -439,6 +471,88 @@ ALTER SEQUENCE public.document_counters_id_seq OWNED BY public.document_counters
 
 
 --
+-- Name: finance_installments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_installments (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    title_id bigint NOT NULL,
+    number integer NOT NULL,
+    due_on date NOT NULL,
+    amount_cents bigint NOT NULL,
+    settled_cents bigint DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT finance_installments_amount_positive CHECK ((amount_cents > 0)),
+    CONSTRAINT finance_installments_number_positive CHECK ((number > 0)),
+    CONSTRAINT finance_installments_settled_within_amount CHECK (((settled_cents >= 0) AND (settled_cents <= amount_cents)))
+);
+
+
+--
+-- Name: finance_installments_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.finance_installments_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: finance_installments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.finance_installments_id_seq OWNED BY public.finance_installments.id;
+
+
+--
+-- Name: finance_titles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.finance_titles (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    kind character varying NOT NULL,
+    partner_id bigint NOT NULL,
+    partner_name character varying NOT NULL,
+    receipt_id bigint,
+    total_cents bigint NOT NULL,
+    currency character varying(3) DEFAULT 'BRL'::character varying NOT NULL,
+    status character varying DEFAULT 'open'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT finance_titles_currency_brl CHECK (((currency)::text = 'BRL'::text)),
+    CONSTRAINT finance_titles_kind_valid CHECK (((kind)::text = ANY ((ARRAY['payable'::character varying, 'receivable'::character varying])::text[]))),
+    CONSTRAINT finance_titles_payable_has_a_receipt CHECK ((((kind)::text <> 'payable'::text) OR (receipt_id IS NOT NULL))),
+    CONSTRAINT finance_titles_status_valid CHECK (((status)::text = ANY ((ARRAY['open'::character varying, 'cancelled'::character varying])::text[]))),
+    CONSTRAINT finance_titles_total_range CHECK (((total_cents > 0) AND (total_cents <= '1000000000000000'::bigint)))
+);
+
+
+--
+-- Name: finance_titles_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.finance_titles_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: finance_titles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.finance_titles_id_seq OWNED BY public.finance_titles.id;
+
+
+--
 -- Name: idempotency_keys; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -490,7 +604,7 @@ CREATE TABLE public.identity_invitations (
     accepted_at timestamp(6) without time zone,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
-    CONSTRAINT identity_invitations_role_valid CHECK (((role)::text = ANY ((ARRAY['owner'::character varying, 'admin'::character varying, 'purchasing'::character varying, 'sales'::character varying, 'finance'::character varying, 'read_only'::character varying])::text[])))
+    CONSTRAINT identity_invitations_role_valid CHECK (((role)::text = ANY (ARRAY[('owner'::character varying)::text, ('admin'::character varying)::text, ('purchasing'::character varying)::text, ('sales'::character varying)::text, ('finance'::character varying)::text, ('read_only'::character varying)::text])))
 );
 
 
@@ -714,11 +828,14 @@ CREATE TABLE public.inventory_movements (
     note text,
     actor_user_id bigint NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
+    receipt_line_id bigint,
     CONSTRAINT inventory_movements_adjustment_has_reason CHECK ((((kind)::text <> 'adjustment'::text) OR (reason IS NOT NULL))),
     CONSTRAINT inventory_movements_adjustment_moves_stock CHECK ((((kind)::text <> 'adjustment'::text) OR (quantity <> (0)::numeric))),
     CONSTRAINT inventory_movements_currency_brl CHECK (((currency)::text = 'BRL'::text)),
-    CONSTRAINT inventory_movements_kind_valid CHECK (((kind)::text = 'adjustment'::text)),
+    CONSTRAINT inventory_movements_kind_valid CHECK (((kind)::text = ANY ((ARRAY['adjustment'::character varying, 'receipt'::character varying])::text[]))),
+    CONSTRAINT inventory_movements_only_receipts_have_a_line CHECK (((receipt_line_id IS NULL) OR ((kind)::text = 'receipt'::text))),
     CONSTRAINT inventory_movements_reason_valid CHECK (((reason IS NULL) OR ((reason)::text = ANY ((ARRAY['opening_balance'::character varying, 'count'::character varying, 'loss'::character varying, 'damage'::character varying, 'theft'::character varying, 'expiry'::character varying, 'found'::character varying, 'other'::character varying])::text[])))),
+    CONSTRAINT inventory_movements_receipt_shape CHECK ((((kind)::text <> 'receipt'::text) OR ((quantity > (0)::numeric) AND (reason IS NULL) AND (receipt_line_id IS NOT NULL)))),
     CONSTRAINT inventory_movements_value_follows_quantity CHECK ((((quantity > (0)::numeric) AND (value_cents >= 0)) OR ((quantity < (0)::numeric) AND (value_cents <= 0)) OR (quantity = (0)::numeric)))
 );
 
@@ -890,6 +1007,97 @@ CREATE SEQUENCE public.purchasing_orders_id_seq
 --
 
 ALTER SEQUENCE public.purchasing_orders_id_seq OWNED BY public.purchasing_orders.id;
+
+
+--
+-- Name: purchasing_receipt_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchasing_receipt_lines (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    receipt_id bigint NOT NULL,
+    order_id bigint NOT NULL,
+    order_line_id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    product_sku character varying NOT NULL,
+    product_name character varying NOT NULL,
+    purchase_unit_code character varying NOT NULL,
+    stock_unit_code character varying NOT NULL,
+    factor numeric(15,6) NOT NULL,
+    unit_price_cents bigint NOT NULL,
+    discount_bp integer NOT NULL,
+    quantity numeric(15,3) NOT NULL,
+    stock_quantity numeric(15,3) NOT NULL,
+    gross_cents bigint NOT NULL,
+    discount_cents bigint NOT NULL,
+    net_cents bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT purchasing_receipt_lines_amounts_consistent CHECK (((gross_cents >= 0) AND (discount_cents >= 0) AND (discount_cents <= gross_cents) AND (net_cents = (gross_cents - discount_cents)))),
+    CONSTRAINT purchasing_receipt_lines_discount_range CHECK (((discount_bp >= 0) AND (discount_bp <= 10000))),
+    CONSTRAINT purchasing_receipt_lines_moves_stock CHECK (((quantity > (0)::numeric) AND (stock_quantity > (0)::numeric)))
+);
+
+
+--
+-- Name: purchasing_receipt_lines_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.purchasing_receipt_lines_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: purchasing_receipt_lines_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.purchasing_receipt_lines_id_seq OWNED BY public.purchasing_receipt_lines.id;
+
+
+--
+-- Name: purchasing_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.purchasing_receipts (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    number bigint NOT NULL,
+    order_id bigint NOT NULL,
+    warehouse_id bigint NOT NULL,
+    received_on date NOT NULL,
+    supplier_invoice_number character varying,
+    total_cents bigint DEFAULT 0 NOT NULL,
+    status character varying DEFAULT 'posted'::character varying NOT NULL,
+    currency character varying(3) DEFAULT 'BRL'::character varying NOT NULL,
+    created_by_user_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT purchasing_receipts_currency_brl CHECK (((currency)::text = 'BRL'::text)),
+    CONSTRAINT purchasing_receipts_status_valid CHECK (((status)::text = 'posted'::text)),
+    CONSTRAINT purchasing_receipts_total_range CHECK (((total_cents >= 0) AND (total_cents <= '1000000000000000'::bigint)))
+);
+
+
+--
+-- Name: purchasing_receipts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.purchasing_receipts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: purchasing_receipts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.purchasing_receipts_id_seq OWNED BY public.purchasing_receipts.id;
 
 
 --
@@ -1427,6 +1635,20 @@ ALTER TABLE ONLY public.document_counters ALTER COLUMN id SET DEFAULT nextval('p
 
 
 --
+-- Name: finance_installments id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_installments ALTER COLUMN id SET DEFAULT nextval('public.finance_installments_id_seq'::regclass);
+
+
+--
+-- Name: finance_titles id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_titles ALTER COLUMN id SET DEFAULT nextval('public.finance_titles_id_seq'::regclass);
+
+
+--
 -- Name: idempotency_keys id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1501,6 +1723,20 @@ ALTER TABLE ONLY public.purchasing_order_lines ALTER COLUMN id SET DEFAULT nextv
 --
 
 ALTER TABLE ONLY public.purchasing_orders ALTER COLUMN id SET DEFAULT nextval('public.purchasing_orders_id_seq'::regclass);
+
+
+--
+-- Name: purchasing_receipt_lines id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipt_lines ALTER COLUMN id SET DEFAULT nextval('public.purchasing_receipt_lines_id_seq'::regclass);
+
+
+--
+-- Name: purchasing_receipts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipts ALTER COLUMN id SET DEFAULT nextval('public.purchasing_receipts_id_seq'::regclass);
 
 
 --
@@ -1666,6 +1902,22 @@ ALTER TABLE ONLY public.document_counters
 
 
 --
+-- Name: finance_installments finance_installments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_installments
+    ADD CONSTRAINT finance_installments_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: finance_titles finance_titles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_titles
+    ADD CONSTRAINT finance_titles_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: idempotency_keys idempotency_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1751,6 +2003,22 @@ ALTER TABLE ONLY public.purchasing_order_lines
 
 ALTER TABLE ONLY public.purchasing_orders
     ADD CONSTRAINT purchasing_orders_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: purchasing_receipt_lines purchasing_receipt_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipt_lines
+    ADD CONSTRAINT purchasing_receipt_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: purchasing_receipts purchasing_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipts
+    ADD CONSTRAINT purchasing_receipts_pkey PRIMARY KEY (id);
 
 
 --
@@ -1871,6 +2139,13 @@ ALTER TABLE ONLY public.solid_queue_scheduled_executions
 
 ALTER TABLE ONLY public.solid_queue_semaphores
     ADD CONSTRAINT solid_queue_semaphores_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: idx_on_organization_id_order_line_id_ea49188de0; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_on_organization_id_order_line_id_ea49188de0 ON public.purchasing_receipt_lines USING btree (organization_id, order_line_id);
 
 
 --
@@ -2032,6 +2307,55 @@ CREATE UNIQUE INDEX index_document_counters_on_organization_and_kind ON public.d
 --
 
 CREATE INDEX index_document_counters_on_organization_id ON public.document_counters USING btree (organization_id);
+
+
+--
+-- Name: index_finance_installments_on_organization_and_due_on; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_finance_installments_on_organization_and_due_on ON public.finance_installments USING btree (organization_id, due_on);
+
+
+--
+-- Name: index_finance_installments_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_finance_installments_on_organization_id ON public.finance_installments USING btree (organization_id);
+
+
+--
+-- Name: index_finance_installments_on_title_and_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_finance_installments_on_title_and_number ON public.finance_installments USING btree (title_id, number);
+
+
+--
+-- Name: index_finance_titles_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_finance_titles_on_organization_id ON public.finance_titles USING btree (organization_id);
+
+
+--
+-- Name: index_finance_titles_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_finance_titles_on_organization_id_and_id ON public.finance_titles USING btree (organization_id, id);
+
+
+--
+-- Name: index_finance_titles_on_organization_id_and_kind_and_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_finance_titles_on_organization_id_and_kind_and_status ON public.finance_titles USING btree (organization_id, kind, status);
+
+
+--
+-- Name: index_finance_titles_on_receipt_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_finance_titles_on_receipt_id ON public.finance_titles USING btree (receipt_id) WHERE (receipt_id IS NOT NULL);
 
 
 --
@@ -2217,6 +2541,13 @@ CREATE INDEX index_inventory_movements_on_organization_warehouse_and_time ON pub
 
 
 --
+-- Name: index_inventory_movements_on_receipt_line_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_inventory_movements_on_receipt_line_id ON public.inventory_movements USING btree (receipt_line_id) WHERE (receipt_line_id IS NOT NULL);
+
+
+--
 -- Name: index_inventory_warehouses_on_organization_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2319,6 +2650,69 @@ CREATE INDEX index_purchasing_orders_on_organization_id_and_supplier_id ON publi
 --
 
 CREATE INDEX index_purchasing_orders_on_organization_status_and_number ON public.purchasing_orders USING btree (organization_id, status, number);
+
+
+--
+-- Name: index_purchasing_receipt_lines_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_receipt_lines_on_organization_id ON public.purchasing_receipt_lines USING btree (organization_id);
+
+
+--
+-- Name: index_purchasing_receipt_lines_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_receipt_lines_on_organization_id_and_id ON public.purchasing_receipt_lines USING btree (organization_id, id);
+
+
+--
+-- Name: index_purchasing_receipt_lines_on_receipt_and_order_line; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_receipt_lines_on_receipt_and_order_line ON public.purchasing_receipt_lines USING btree (receipt_id, order_line_id);
+
+
+--
+-- Name: index_purchasing_receipts_on_created_by_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_receipts_on_created_by_user_id ON public.purchasing_receipts USING btree (created_by_user_id);
+
+
+--
+-- Name: index_purchasing_receipts_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_receipts_on_organization_id ON public.purchasing_receipts USING btree (organization_id);
+
+
+--
+-- Name: index_purchasing_receipts_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_receipts_on_organization_id_and_id ON public.purchasing_receipts USING btree (organization_id, id);
+
+
+--
+-- Name: index_purchasing_receipts_on_organization_id_and_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_receipts_on_organization_id_and_number ON public.purchasing_receipts USING btree (organization_id, number);
+
+
+--
+-- Name: index_purchasing_receipts_on_organization_id_and_received_on; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_purchasing_receipts_on_organization_id_and_received_on ON public.purchasing_receipts USING btree (organization_id, received_on);
+
+
+--
+-- Name: index_purchasing_receipts_on_organization_order_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_receipts_on_organization_order_and_id ON public.purchasing_receipts USING btree (organization_id, order_id, id);
 
 
 --
@@ -2595,6 +2989,34 @@ CREATE TRIGGER purchasing_order_lines_freeze BEFORE INSERT OR DELETE OR UPDATE O
 
 
 --
+-- Name: purchasing_receipt_lines purchasing_receipt_lines_append_only; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER purchasing_receipt_lines_append_only BEFORE DELETE OR UPDATE ON public.purchasing_receipt_lines FOR EACH ROW EXECUTE FUNCTION public.purchasing_receipts_append_only();
+
+
+--
+-- Name: purchasing_receipt_lines purchasing_receipt_lines_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER purchasing_receipt_lines_no_truncate BEFORE TRUNCATE ON public.purchasing_receipt_lines FOR EACH STATEMENT EXECUTE FUNCTION public.purchasing_receipts_no_truncate();
+
+
+--
+-- Name: purchasing_receipts purchasing_receipts_append_only; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER purchasing_receipts_append_only BEFORE DELETE OR UPDATE ON public.purchasing_receipts FOR EACH ROW EXECUTE FUNCTION public.purchasing_receipts_append_only();
+
+
+--
+-- Name: purchasing_receipts purchasing_receipts_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER purchasing_receipts_no_truncate BEFORE TRUNCATE ON public.purchasing_receipts FOR EACH STATEMENT EXECUTE FUNCTION public.purchasing_receipts_no_truncate();
+
+
+--
 -- Name: catalog_products fk_catalog_products_category_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2627,6 +3049,30 @@ ALTER TABLE ONLY public.catalog_unit_conversions
 
 
 --
+-- Name: finance_installments fk_finance_installments_title_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_installments
+    ADD CONSTRAINT fk_finance_installments_title_same_organization FOREIGN KEY (organization_id, title_id) REFERENCES public.finance_titles(organization_id, id);
+
+
+--
+-- Name: finance_titles fk_finance_titles_partner_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_titles
+    ADD CONSTRAINT fk_finance_titles_partner_same_organization FOREIGN KEY (organization_id, partner_id) REFERENCES public.catalog_partners(organization_id, id);
+
+
+--
+-- Name: finance_titles fk_finance_titles_receipt_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_titles
+    ADD CONSTRAINT fk_finance_titles_receipt_same_organization FOREIGN KEY (organization_id, receipt_id) REFERENCES public.purchasing_receipts(organization_id, id);
+
+
+--
 -- Name: inventory_balances fk_inventory_balances_product_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2648,6 +3094,14 @@ ALTER TABLE ONLY public.inventory_balances
 
 ALTER TABLE ONLY public.inventory_movements
     ADD CONSTRAINT fk_inventory_movements_product_same_organization FOREIGN KEY (organization_id, product_id) REFERENCES public.catalog_products(organization_id, id);
+
+
+--
+-- Name: inventory_movements fk_inventory_movements_receipt_line_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT fk_inventory_movements_receipt_line_same_organization FOREIGN KEY (organization_id, receipt_line_id) REFERENCES public.purchasing_receipt_lines(organization_id, id);
 
 
 --
@@ -2688,6 +3142,54 @@ ALTER TABLE ONLY public.purchasing_order_lines
 
 ALTER TABLE ONLY public.purchasing_orders
     ADD CONSTRAINT fk_purchasing_orders_supplier_same_organization FOREIGN KEY (organization_id, supplier_id) REFERENCES public.catalog_partners(organization_id, id);
+
+
+--
+-- Name: purchasing_receipt_lines fk_purchasing_receipt_lines_order_line_same_order; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipt_lines
+    ADD CONSTRAINT fk_purchasing_receipt_lines_order_line_same_order FOREIGN KEY (organization_id, order_id, order_line_id) REFERENCES public.purchasing_order_lines(organization_id, order_id, id);
+
+
+--
+-- Name: purchasing_receipt_lines fk_purchasing_receipt_lines_product_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipt_lines
+    ADD CONSTRAINT fk_purchasing_receipt_lines_product_same_organization FOREIGN KEY (organization_id, product_id) REFERENCES public.catalog_products(organization_id, id);
+
+
+--
+-- Name: purchasing_receipt_lines fk_purchasing_receipt_lines_receipt_same_order; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipt_lines
+    ADD CONSTRAINT fk_purchasing_receipt_lines_receipt_same_order FOREIGN KEY (organization_id, order_id, receipt_id) REFERENCES public.purchasing_receipts(organization_id, order_id, id);
+
+
+--
+-- Name: purchasing_receipts fk_purchasing_receipts_order_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipts
+    ADD CONSTRAINT fk_purchasing_receipts_order_same_organization FOREIGN KEY (organization_id, order_id) REFERENCES public.purchasing_orders(organization_id, id);
+
+
+--
+-- Name: purchasing_receipts fk_purchasing_receipts_warehouse_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipts
+    ADD CONSTRAINT fk_purchasing_receipts_warehouse_same_organization FOREIGN KEY (organization_id, warehouse_id) REFERENCES public.inventory_warehouses(organization_id, id);
+
+
+--
+-- Name: finance_titles fk_rails_14553adfa1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_titles
+    ADD CONSTRAINT fk_rails_14553adfa1 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
 
 
 --
@@ -2907,6 +3409,14 @@ ALTER TABLE ONLY public.identity_memberships
 
 
 --
+-- Name: purchasing_receipt_lines fk_rails_922e9f343a; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipt_lines
+    ADD CONSTRAINT fk_rails_922e9f343a FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: idempotency_keys fk_rails_96c4cbd0a9; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2963,6 +3473,14 @@ ALTER TABLE ONLY public.solid_queue_scheduled_executions
 
 
 --
+-- Name: finance_installments fk_rails_cdb3f78607; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.finance_installments
+    ADD CONSTRAINT fk_rails_cdb3f78607 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: inventory_warehouses fk_rails_df87fc6a51; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2979,11 +3497,27 @@ ALTER TABLE ONLY public.catalog_partners
 
 
 --
+-- Name: purchasing_receipts fk_rails_f9fc25ff13; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipts
+    ADD CONSTRAINT fk_rails_f9fc25ff13 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: catalog_units fk_rails_fb5250d042; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.catalog_units
     ADD CONSTRAINT fk_rails_fb5250d042 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
+-- Name: purchasing_receipts fk_rails_fedc111e78; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipts
+    ADD CONSTRAINT fk_rails_fedc111e78 FOREIGN KEY (created_by_user_id) REFERENCES public.identity_users(id);
 
 
 --
@@ -3078,6 +3612,32 @@ CREATE POLICY document_counters_tenant_isolation ON public.document_counters USI
 
 
 --
+-- Name: finance_installments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_installments ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: finance_installments finance_installments_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY finance_installments_tenant_isolation ON public.finance_installments USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: finance_titles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.finance_titles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: finance_titles finance_titles_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY finance_titles_tenant_isolation ON public.finance_titles USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
 -- Name: idempotency_keys; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -3169,12 +3729,43 @@ CREATE POLICY purchasing_orders_tenant_isolation ON public.purchasing_orders USI
 
 
 --
+-- Name: purchasing_receipt_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchasing_receipt_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchasing_receipt_lines purchasing_receipt_lines_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purchasing_receipt_lines_tenant_isolation ON public.purchasing_receipt_lines USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: purchasing_receipts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.purchasing_receipts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: purchasing_receipts purchasing_receipts_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY purchasing_receipts_tenant_isolation ON public.purchasing_receipts USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
 -- PostgreSQL database dump complete
 --
 
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926160400'),
+('20260926160300'),
+('20260926160200'),
+('20260926160100'),
+('20260926160000'),
 ('20260926150200'),
 ('20260926150100'),
 ('20260926150000'),

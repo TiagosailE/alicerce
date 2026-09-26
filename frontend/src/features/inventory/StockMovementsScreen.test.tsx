@@ -38,6 +38,7 @@ function movement(overrides: Partial<StockMovement> = {}): StockMovement {
     kind: "adjustment",
     reason: "loss",
     note: "2 sacos molhados",
+    receipt: null,
     product: { id: 7, sku: "CIM-001", name: "Cimento CP II", stock_unit: unit },
     warehouse: { id: 1, name: "Loja", active: true },
     quantity: "-3.000",
@@ -105,6 +106,34 @@ describe("StockMovementsScreen", () => {
     expect(cells[7]).toHaveTextContent("Joana Lima");
     expect(cellText(cells, 8)).toBe("2 sacos molhados");
     expect(cellText(cells, 6)).toContain("R$ 10,20");
+  });
+
+  it("names the receipt a receipt movement came from, where a count shows its reason", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultHandlers,
+        "GET /stock_movements": () =>
+          listResponse([
+            movement({
+              id: 2,
+              kind: "receipt",
+              reason: null,
+              note: null,
+              receipt: { id: 9, number: 12 },
+              quantity: "120.000",
+              value_cents: 382_200,
+            }),
+          ]),
+      }),
+    );
+
+    renderScreen();
+
+    const row = (await screen.findByText("Cimento CP II")).closest("tr");
+    const cells = within(row as HTMLElement).getAllByRole("cell");
+    expect(cells[3]).toHaveTextContent("Recebimento nº 12");
+    expect(cells[4]).toHaveTextContent("+120 UN");
   });
 
   it("shows an empty state", async () => {

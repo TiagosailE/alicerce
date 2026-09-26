@@ -746,6 +746,137 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
 
+  /purchase_orders/{id}/receipts:
+    post:
+      operationId: createReceipt
+      summary: Receive goods against an approved purchase order
+      description: >
+        Owner, admin and purchasing only (ADR 0017). One receipt for one warehouse:
+        stock enters through the ledger at each line's net cost, the order becomes
+        partially received or received, and a payable is opened for the receipt's
+        total in the order's installments, all in one transaction. A line takes at
+        most what is left of it; more answers 422 over_receipt, with no tolerance.
+        An order that is not approved or partially received answers 409
+        invalid_transition. A balance already below zero answers 422
+        negative_balance. The same Idempotency-Key with the same request returns
+        the same receipt; with another request it answers 422 idempotency_key_reused.
+        The payable is in the response only for a role that reads payables.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReceiptRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/ReceiptResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /receipts:
+    get:
+      operationId: listReceipts
+      summary: List receipts, newest number first
+      description: Owner, admin, purchasing, finance and read_only can read; sales has no access (ADR 0017, ADR 0008).
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: order_id
+          in: query
+          schema: { type: integer }
+        - name: warehouse_id
+          in: query
+          schema: { type: integer }
+        - name: q
+          in: query
+          description: Matches the receipt number or the supplier's name.
+          schema: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/ReceiptListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /receipts/{id}:
+    get:
+      operationId: showReceipt
+      summary: Show a receipt as a report
+      description: >
+        Per line what it was priced with, its gross, discount and net, and the stock
+        it became. The payable is null for a role that does not read payables.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/ReceiptResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /payables:
+    get:
+      operationId: listPayables
+      summary: List payables, newest first, with their installments
+      description: >
+        Owner, admin, finance and read_only can read; purchasing and sales have no
+        access (ADR 0017). Read-only: settlement arrives with the finance slice.
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/TitleStatus" }
+        - name: q
+          in: query
+          description: Matches the supplier's name.
+          schema: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/PayableListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
   /partners:
     get:
       operationId: listPartners
@@ -1238,6 +1369,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/PurchaseOrderListResponseBody"
+    ReceiptResponse:
+      description: A receipt with its lines and, for a role that reads payables, the payable it opened.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ReceiptResponseBody"
+    ReceiptListResponse:
+      description: A page of receipts.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ReceiptListResponseBody"
+    PayableListResponse:
+      description: A page of payables.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PayableListResponseBody"
     PartnerResponse:
       description: A partner.
       content:
@@ -1800,12 +1949,21 @@ components:
     StockMovement:
       type: object
       additionalProperties: false
-      required: [ id, kind, reason, note, product, warehouse, quantity, value_cents, currency, on_hand_after, value_after_cents, actor, created_at ]
+      required: [ id, kind, reason, note, receipt, product, warehouse, quantity, value_cents, currency, on_hand_after, value_after_cents, actor, created_at ]
       properties:
         id: { type: integer }
         kind:
           type: string
-          enum: [ adjustment ]
+          enum: [ adjustment, receipt ]
+        receipt:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [ id, number ]
+          description: The receipt a receipt movement came from; null for any other kind.
+          properties:
+            id: { type: integer }
+            number: { type: integer }
         reason:
           nullable: true
           allOf: [ { $ref: "#/components/schemas/AdjustmentReason" } ]
@@ -2054,6 +2212,266 @@ components:
         data:
           type: array
           items: { $ref: "#/components/schemas/PurchaseOrderSummary" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    CreateReceiptRequest:
+      type: object
+      additionalProperties: false
+      required: [ warehouse_id, received_on, lines ]
+      properties:
+        warehouse_id: { type: integer }
+        received_on:
+          type: string
+          format: date
+          description: >
+            A day in the organization's time zone: not in the future and not before
+            the day the order was approved.
+        supplier_invoice_number:
+          type: string
+          maxLength: 60
+          description: Free text typed from the supplier's paper invoice.
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 200
+          description: One entry per order line, at most once each.
+          items: { $ref: "#/components/schemas/ReceiptLineInput" }
+
+    ReceiptLineInput:
+      type: object
+      additionalProperties: false
+      required: [ order_line_id, quantity ]
+      properties:
+        order_line_id: { type: integer }
+        quantity:
+          type: string
+          pattern: '^[0-9]{1,12}(\.[0-9]{1,3})?$'
+          description: In purchase units, greater than zero and at most what is left of the line.
+
+    ReceiptSummary:
+      type: object
+      additionalProperties: false
+      required: [ id, number, order, supplier, warehouse, received_on, total_cents, currency, created_at ]
+      properties:
+        id: { type: integer }
+        number: { type: integer }
+        order:
+          type: object
+          additionalProperties: false
+          required: [ id, number ]
+          properties:
+            id: { type: integer }
+            number: { type: integer }
+        supplier:
+          type: object
+          additionalProperties: false
+          required: [ id, name ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        warehouse:
+          type: object
+          additionalProperties: false
+          required: [ id, name ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        received_on:
+          type: string
+          format: date
+        total_cents: { type: integer }
+        currency:
+          type: string
+          enum: [ BRL ]
+        created_at:
+          type: string
+          format: date-time
+
+    ReceiptLine:
+      type: object
+      additionalProperties: false
+      required: [ id, order_line_id, product, purchase_unit_code, stock_unit_code, factor, unit_price_cents, discount_bp, quantity, stock_quantity, gross_cents, discount_cents, net_cents ]
+      properties:
+        id: { type: integer }
+        order_line_id: { type: integer }
+        product:
+          type: object
+          additionalProperties: false
+          required: [ id, sku, name ]
+          properties:
+            id: { type: integer }
+            sku: { type: string }
+            name: { type: string }
+        purchase_unit_code: { type: string }
+        stock_unit_code: { type: string }
+        factor:
+          type: string
+          pattern: '^[0-9]{1,9}\.[0-9]{6}$'
+          description: Stock units per purchase unit, as the order line had it.
+        unit_price_cents:
+          type: integer
+          description: Per purchase unit, as the order line had it.
+        discount_bp: { type: integer }
+        quantity:
+          type: string
+          pattern: '^[0-9]{1,12}\.[0-9]{3}$'
+          description: In purchase units.
+        stock_quantity:
+          type: string
+          pattern: '^[0-9]{1,12}\.[0-9]{3}$'
+          description: What entered stock, in stock units.
+        gross_cents: { type: integer }
+        discount_cents: { type: integer }
+        net_cents:
+          type: integer
+          description: Gross minus discount; the value that entered stock.
+
+    Receipt:
+      type: object
+      additionalProperties: false
+      required: [ id, number, status, order, supplier, warehouse, received_on, supplier_invoice_number, total_cents, currency, created_by, created_at, lines, payable ]
+      properties:
+        id: { type: integer }
+        number: { type: integer }
+        status:
+          type: string
+          enum: [ posted ]
+        order:
+          type: object
+          additionalProperties: false
+          required: [ id, number ]
+          properties:
+            id: { type: integer }
+            number: { type: integer }
+        supplier:
+          type: object
+          additionalProperties: false
+          required: [ id, name ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        warehouse:
+          type: object
+          additionalProperties: false
+          required: [ id, name ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        received_on:
+          type: string
+          format: date
+        supplier_invoice_number:
+          type: string
+          nullable: true
+        total_cents: { type: integer }
+        currency:
+          type: string
+          enum: [ BRL ]
+        created_by:
+          type: object
+          additionalProperties: false
+          required: [ id, name ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        created_at:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/ReceiptLine" }
+        payable:
+          nullable: true
+          description: Null when the receipt is worth nothing or the role does not read payables.
+          allOf: [ { $ref: "#/components/schemas/Title" } ]
+
+    ReceiptResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/Receipt"
+
+    ReceiptListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/ReceiptSummary" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    TitleStatus:
+      type: string
+      enum: [ open, cancelled ]
+
+    Installment:
+      type: object
+      additionalProperties: false
+      required: [ id, number, due_on, amount_cents, settled_cents, open_cents ]
+      properties:
+        id: { type: integer }
+        number: { type: integer }
+        due_on:
+          type: string
+          format: date
+        amount_cents: { type: integer }
+        settled_cents: { type: integer }
+        open_cents: { type: integer }
+
+    Title:
+      type: object
+      additionalProperties: false
+      required: [ id, kind, status, partner, receipt, total_cents, settled_cents, open_cents, currency, created_at, installments ]
+      properties:
+        id: { type: integer }
+        kind:
+          type: string
+          enum: [ payable, receivable ]
+        status:
+          $ref: "#/components/schemas/TitleStatus"
+        partner:
+          type: object
+          additionalProperties: false
+          required: [ id, name ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        receipt:
+          type: object
+          nullable: true
+          additionalProperties: false
+          required: [ id, number ]
+          properties:
+            id: { type: integer }
+            number: { type: integer }
+        total_cents:
+          type: integer
+          description: The sum of the installments' amounts.
+        settled_cents: { type: integer }
+        open_cents: { type: integer }
+        currency:
+          type: string
+          enum: [ BRL ]
+        created_at:
+          type: string
+          format: date-time
+        installments:
+          type: array
+          items: { $ref: "#/components/schemas/Installment" }
+
+    PayableListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Title" }
         meta:
           $ref: "#/components/schemas/Meta"
 

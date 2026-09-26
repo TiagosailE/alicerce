@@ -365,6 +365,7 @@ describe("StockScreen", () => {
                     kind: "adjustment",
                     reason: "opening_balance",
                     note: null,
+                    receipt: null,
                     product: { id: 7, sku: "CIM-001", name: "Cimento CP II", stock_unit: unit },
                     warehouse: warehouse(),
                     quantity: "1000.500",

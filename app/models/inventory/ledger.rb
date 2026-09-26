@@ -25,7 +25,7 @@ module Inventory
       value_cents.abs <= VALUE_CAP_CENTS && (balance.value_cents + value_cents).abs <= VALUE_CAP_CENTS
     end
 
-    def post(balance:, kind:, quantity:, value_cents:, actor:, reason: nil, note: nil, last_unit_cost: nil)
+    def post(balance:, kind:, quantity:, value_cents:, actor:, reason: nil, note: nil, last_unit_cost: nil, receipt_line_id: nil)
       current = Inventory::Balance.lock("FOR NO KEY UPDATE").find(balance.id)
       raise ArgumentError, "value out of range" unless fits?(current, value_cents)
 
@@ -33,7 +33,8 @@ module Inventory
       value_after = current.value_cents + value_cents
       movement = Inventory::Movement.create!(
         organization_id: current.organization_id, product_id: current.product_id, warehouse_id: current.warehouse_id,
-        kind:, quantity:, value_cents:, on_hand_after:, value_after_cents: value_after, reason:, note:, actor_user: actor
+        kind:, quantity:, value_cents:, on_hand_after:, value_after_cents: value_after, reason:, note:, actor_user: actor,
+        receipt_line_id:
       )
       current.update!(on_hand: on_hand_after, value_cents: value_after, last_unit_cost: last_unit_cost || current.last_unit_cost)
       balance.reload

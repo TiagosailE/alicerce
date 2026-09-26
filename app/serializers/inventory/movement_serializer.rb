@@ -12,6 +12,7 @@ module Inventory
         kind: @movement.kind,
         reason: @movement.reason,
         note: @movement.note,
+        receipt: receipt,
         product: Catalog::ProductReferenceSerializer.new(@movement.product).as_json,
         warehouse: WarehouseSerializer.new(@movement.warehouse).as_json,
         quantity: DecimalString.format(@movement.quantity, 3),
@@ -23,5 +24,12 @@ module Inventory
         created_at: @movement.created_at.utc.iso8601
       }
     end
+
+    private
+      # The receipt a receipt movement came from, so the ledger can point at it.
+      def receipt
+        receipt = @movement.receipt_line&.receipt
+        receipt && { id: receipt.id, number: receipt.number }
+      end
   end
 end

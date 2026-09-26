@@ -24,7 +24,7 @@ RSpec.describe "Malformed parameters" do
   end
 
   describe "pagination and filters that arrive as an array or a hash" do
-    %w[units categories products partners warehouses memberships invitations stock_balances purchase_orders].each do |resource|
+    %w[units categories products partners warehouses memberships invitations stock_balances purchase_orders receipts payables].each do |resource|
       it "answers 422 for page[] on /#{resource}" do
         get "/api/v1/#{resource}?page[]=1"
 

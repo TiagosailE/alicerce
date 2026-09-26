@@ -9,7 +9,7 @@ import {
   formatQuantity,
   formatSignedQuantity,
 } from "../../lib/format";
-import { t } from "../../i18n";
+import { t, tf } from "../../i18n";
 import { type AdjustmentReason, useStockMovements, useWarehouseOptions } from "./api";
 import { StockTabs } from "./StockTabs";
 import { ADJUSTMENT_REASONS, REASON_KEYS } from "./stockLabels";
@@ -145,7 +145,11 @@ export function StockMovementsScreen() {
                       </td>
                       <td className="py-2 pr-3 text-text-muted">{movement.warehouse.name}</td>
                       <td className="py-2 pr-3 text-text-muted">
-                        {movement.reason ? t(REASON_KEYS[movement.reason]) : ""}
+                        {movement.receipt
+                          ? tf("stock.movementReceipt", { number: String(movement.receipt.number) })
+                          : movement.reason
+                            ? t(REASON_KEYS[movement.reason])
+                            : ""}
                       </td>
                       <td className="num py-2 pr-3 text-right text-text">
                         {formatSignedQuantity(movement.quantity)} {unit}

@@ -25,6 +25,15 @@ module PurchasingHelpers
 
     result.value
   end
+
+  # An order that has been approved, ready to receive.
+  def approved_order!(actor:, revision: nil, **options)
+    order = create_order!(actor:, **options)
+    result = Purchasing::ApproveOrder.call(order:, actor:, revision: revision || order.revision)
+    raise "could not approve the order: #{result.details}" unless result.success?
+
+    order.reload
+  end
 end
 
 RSpec.configure { |config| config.include PurchasingHelpers }

@@ -311,6 +311,7 @@ export const ptBR = {
   "stock.reasonExpiry": "Vencimento",
   "stock.reasonFound": "Sobra encontrada",
   "stock.reasonOther": "Outro",
+  "stock.movementReceipt": "Recebimento nº {number}",
   "stock.adjustedNoDifference": "A contagem confere com o saldo: nada a ajustar.",
   "stock.fieldErrorGeneric": "Verifique este campo.",
   "stock.fieldErrorCountedNotANumber": "Informe um número válido, como 12 ou 12,5.",

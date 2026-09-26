@@ -246,6 +246,27 @@ the copy is masked for a role that may not see the partner's CPF in full, record
 in the audit trail as changed without its value, and listed in the LGPD map. The
 free-text `note` and `supplier_invoice_number` are filtered from request logs.
 
+### Decided while building the receipt
+
+- A posted receipt and its lines are append-only in the same two layers as the
+  ledger: the app role holds no UPDATE, DELETE or TRUNCATE on them, and a trigger
+  refuses the same for every role but the table owner. The model is read-only once
+  saved.
+- `ReceiveGoods` locks every line of the order, ascending by id, not only the
+  requested ones: a receipt already serializes on the order row, so the extra
+  locks cost nothing and no line can be read stale.
+- The receipt reports what is wrong per field: `over_receipt`,
+  `quantity_too_small`, `too_large` (a balance that would not hold the stock, a
+  value or a last cost past their columns), `duplicate_line`, `not_found` (an order
+  line that is not this order's), and for the date `in_the_future`,
+  `before_approval`, `invalid`. A replay answers the stored 201.
+- The payable is included in the receipt's response only for a role that reads
+  payables (`Capabilities.view_payables?`: owner, admin, finance, read_only);
+  purchasing receives and reads the receipt without it, as the matrix above says.
+- `GET /stock_movements` gains `receipt: { id, number }` on a receipt movement, so
+  the ledger can point at the document that caused it.
+- Rate limits for receipts count per controller, as the other purchasing writes do.
+
 ## Consequences
 
 - One title per receipt: settlement never sees a title change.
