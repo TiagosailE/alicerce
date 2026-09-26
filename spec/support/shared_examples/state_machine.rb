@@ -4,8 +4,11 @@
 #   it_behaves_like "a state machine" do
 #     let(:model_class) { Purchasing::Order } # defaults to described_class
 #     def record_in(status) = create(:purchasing_order, status:)
+#     def transition_attributes(from, to) = {} # what a transition to `to` must set
 #   end
 RSpec.shared_examples "a state machine" do
+  def transition_attributes(_from, _to) = {}
+
   let(:model_class) { described_class }
   let(:transitions) { model_class::TRANSITIONS }
   let(:states) { (transitions.keys + transitions.values.flatten).uniq }
@@ -22,7 +25,7 @@ RSpec.shared_examples "a state machine" do
 
         expect(record.can_transition_to?(to)).to eq(allowed), "#{from} -> #{to}: expected can_transition_to? to be #{allowed}"
         if allowed
-          expect { record.transition_to!(to) }.not_to raise_error
+          expect { record.transition_to!(to, **transition_attributes(from, to)) }.not_to raise_error
           expect(record.reload.status).to eq(to)
         else
           expect { record.transition_to!(to) }.to raise_error(HasStateMachine::InvalidTransition)

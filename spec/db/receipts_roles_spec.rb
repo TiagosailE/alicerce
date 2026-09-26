@@ -12,11 +12,12 @@ RSpec.describe "Receipts, as a role that holds the privileges but does not own t
 
   def probe_role = "receipt_probe"
 
-  RECEIPT_REFERENCES = {
-    "finance_titles" => "fk_finance_titles_receipt_same_organization",
-    "purchasing_receipt_lines" => "fk_purchasing_receipt_lines_receipt_same_order"
-  }.freeze
-  RECEIPT_LINE_REFERENCES = { "inventory_movements" => "fk_inventory_movements_receipt_line_same_organization" }.freeze
+  RECEIPT_REFERENCES = [
+    [ "finance_titles", "fk_finance_titles_receipt_same_organization" ],
+    [ "purchasing_receipt_lines", "fk_purchasing_receipt_lines_receipt_same_order" ],
+    [ "purchasing_receipt_lines", "fk_purchasing_receipt_lines_receipt_same_warehouse" ]
+  ].freeze
+  RECEIPT_LINE_REFERENCES = [ [ "inventory_movements", "fk_inventory_movements_receipt_line_same_balance" ] ].freeze
 
   before do
     @organization = create(:organization)
@@ -51,7 +52,7 @@ RSpec.describe "Receipts, as a role that holds the privileges but does not own t
   # A table other tables point at cannot be truncated at all, so before the
   # trigger is ever reached the foreign keys are dropped inside the transaction
   # (rolled back with it), which leaves the trigger the only thing in the way.
-  def as_probe(statement, dropping: {})
+  def as_probe(statement, dropping: [])
     @owner.exec("BEGIN")
     dropping.each { |table, constraint| @owner.exec("ALTER TABLE #{table} DROP CONSTRAINT #{constraint}") }
     @owner.exec("SET LOCAL ROLE #{probe_role}")

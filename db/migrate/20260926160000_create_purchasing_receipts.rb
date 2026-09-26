@@ -25,6 +25,8 @@ class CreatePurchasingReceipts < ActiveRecord::Migration[8.1]
       name: "index_purchasing_receipts_on_organization_id_and_id"
     add_index :purchasing_receipts, [ :organization_id, :order_id, :id ], unique: true,
       name: "index_purchasing_receipts_on_organization_order_and_id"
+    add_index :purchasing_receipts, [ :organization_id, :id, :warehouse_id ], unique: true,
+      name: "index_purchasing_receipts_on_org_id_id_warehouse"
     add_index :purchasing_receipts, [ :organization_id, :received_on ]
 
     add_foreign_key :purchasing_receipts, :purchasing_orders,
@@ -44,6 +46,7 @@ class CreatePurchasingReceipts < ActiveRecord::Migration[8.1]
       t.bigint :order_id, null: false
       t.bigint :order_line_id, null: false
       t.bigint :product_id, null: false
+      t.bigint :warehouse_id, null: false
       t.string :product_sku, null: false
       t.string :product_name, null: false
       t.string :purchase_unit_code, null: false
@@ -63,11 +66,19 @@ class CreatePurchasingReceipts < ActiveRecord::Migration[8.1]
       name: "index_purchasing_receipt_lines_on_receipt_and_order_line"
     add_index :purchasing_receipt_lines, [ :organization_id, :id ], unique: true,
       name: "index_purchasing_receipt_lines_on_organization_id_and_id"
+    # The target of the ledger movement's key: a movement can only point at a line
+    # of its own product and warehouse, so it can never be written for one balance
+    # and tied to another's receipt line.
+    add_index :purchasing_receipt_lines, [ :organization_id, :id, :product_id, :warehouse_id ], unique: true,
+      name: "index_purchasing_receipt_lines_on_org_id_id_product_warehouse"
     add_index :purchasing_receipt_lines, [ :organization_id, :order_line_id ]
 
     add_foreign_key :purchasing_receipt_lines, :purchasing_receipts,
       column: [ :organization_id, :order_id, :receipt_id ], primary_key: [ :organization_id, :order_id, :id ],
       name: "fk_purchasing_receipt_lines_receipt_same_order", validate: false
+    add_foreign_key :purchasing_receipt_lines, :purchasing_receipts,
+      column: [ :organization_id, :receipt_id, :warehouse_id ], primary_key: [ :organization_id, :id, :warehouse_id ],
+      name: "fk_purchasing_receipt_lines_receipt_same_warehouse", validate: false
     add_foreign_key :purchasing_receipt_lines, :purchasing_order_lines,
       column: [ :organization_id, :order_id, :order_line_id ], primary_key: [ :organization_id, :order_id, :id ],
       name: "fk_purchasing_receipt_lines_order_line_same_order", validate: false

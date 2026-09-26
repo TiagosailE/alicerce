@@ -86,6 +86,27 @@ $$;
 
 
 --
+-- Name: finance_payable_matches_receipt(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_payable_matches_receipt() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  receipt_total bigint;
+BEGIN
+  IF NEW.kind = 'payable' AND NEW.receipt_id IS NOT NULL THEN
+    SELECT total_cents INTO receipt_total FROM purchasing_receipts WHERE id = NEW.receipt_id;
+    IF receipt_total IS DISTINCT FROM NEW.total_cents THEN
+      RAISE EXCEPTION 'a payable of % does not match its receipt of %', NEW.total_cents, receipt_total;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: finance_title_matches_installments(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1048,6 +1069,7 @@ CREATE TABLE public.purchasing_orders (
     created_by_user_id bigint NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT purchasing_orders_approval_stamped CHECK ((((status)::text = ANY ((ARRAY['draft'::character varying, 'cancelled'::character varying])::text[])) OR (approved_at IS NOT NULL))),
     CONSTRAINT purchasing_orders_currency_brl CHECK (((currency)::text = 'BRL'::text)),
     CONSTRAINT purchasing_orders_first_due_days_range CHECK (((first_due_days >= 0) AND (first_due_days <= 365))),
     CONSTRAINT purchasing_orders_installments_range CHECK (((installments >= 1) AND (installments <= 24))),
@@ -1088,6 +1110,7 @@ CREATE TABLE public.purchasing_receipt_lines (
     order_id bigint NOT NULL,
     order_line_id bigint NOT NULL,
     product_id bigint NOT NULL,
+    warehouse_id bigint NOT NULL,
     product_sku character varying NOT NULL,
     product_name character varying NOT NULL,
     purchase_unit_code character varying NOT NULL,
@@ -2721,6 +2744,13 @@ CREATE INDEX index_purchasing_orders_on_organization_status_and_number ON public
 
 
 --
+-- Name: index_purchasing_receipt_lines_on_org_id_id_product_warehouse; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_receipt_lines_on_org_id_id_product_warehouse ON public.purchasing_receipt_lines USING btree (organization_id, id, product_id, warehouse_id);
+
+
+--
 -- Name: index_purchasing_receipt_lines_on_organization_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2746,6 +2776,13 @@ CREATE UNIQUE INDEX index_purchasing_receipt_lines_on_receipt_and_order_line ON 
 --
 
 CREATE INDEX index_purchasing_receipts_on_created_by_user_id ON public.purchasing_receipts USING btree (created_by_user_id);
+
+
+--
+-- Name: index_purchasing_receipts_on_org_id_id_warehouse; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_purchasing_receipts_on_org_id_id_warehouse ON public.purchasing_receipts USING btree (organization_id, id, warehouse_id);
 
 
 --
@@ -3057,6 +3094,13 @@ CREATE TRIGGER finance_titles_freeze BEFORE UPDATE ON public.finance_titles FOR 
 
 
 --
+-- Name: finance_titles finance_titles_match_receipt; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER finance_titles_match_receipt BEFORE INSERT ON public.finance_titles FOR EACH ROW EXECUTE FUNCTION public.finance_payable_matches_receipt();
+
+
+--
 -- Name: finance_titles finance_titles_total_matches_installments; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3193,11 +3237,11 @@ ALTER TABLE ONLY public.inventory_movements
 
 
 --
--- Name: inventory_movements fk_inventory_movements_receipt_line_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: inventory_movements fk_inventory_movements_receipt_line_same_balance; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.inventory_movements
-    ADD CONSTRAINT fk_inventory_movements_receipt_line_same_organization FOREIGN KEY (organization_id, receipt_line_id) REFERENCES public.purchasing_receipt_lines(organization_id, id);
+    ADD CONSTRAINT fk_inventory_movements_receipt_line_same_balance FOREIGN KEY (organization_id, receipt_line_id, product_id, warehouse_id) REFERENCES public.purchasing_receipt_lines(organization_id, id, product_id, warehouse_id);
 
 
 --
@@ -3262,6 +3306,14 @@ ALTER TABLE ONLY public.purchasing_receipt_lines
 
 ALTER TABLE ONLY public.purchasing_receipt_lines
     ADD CONSTRAINT fk_purchasing_receipt_lines_receipt_same_order FOREIGN KEY (organization_id, order_id, receipt_id) REFERENCES public.purchasing_receipts(organization_id, order_id, id);
+
+
+--
+-- Name: purchasing_receipt_lines fk_purchasing_receipt_lines_receipt_same_warehouse; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.purchasing_receipt_lines
+    ADD CONSTRAINT fk_purchasing_receipt_lines_receipt_same_warehouse FOREIGN KEY (organization_id, receipt_id, warehouse_id) REFERENCES public.purchasing_receipts(organization_id, id, warehouse_id);
 
 
 --
@@ -3857,6 +3909,8 @@ CREATE POLICY purchasing_receipts_tenant_isolation ON public.purchasing_receipts
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926170200'),
+('20260926170100'),
 ('20260926170000'),
 ('20260926160400'),
 ('20260926160300'),

@@ -11,7 +11,8 @@ module Purchasing
   # failing check therefore costs no number and writes nothing, and nothing here
   # calls out of the database while the locks are held.
   #
-  # Error codes: :validation_failed (fields "lines", "lines.N.order_line_id",
+  # Error codes: :validation_failed (fields "lines" (blank, or too_many past
+  # Receipt::MAX_LINES), "lines.N.order_line_id",
   # "lines.N.quantity", "received_on", "supplier_invoice_number", "warehouse_id",
   # "idempotency_key"), :invalid_transition (the order is not approved or
   # partially received), :negative_balance (a balance involved is below zero,
@@ -19,6 +20,7 @@ module Purchasing
   # :conflict_retry (lock wait timed out or deadlocked, safe to retry with the
   # same key).
   class ReceiveGoods
+    LOCK_TIMEOUT = "3s".freeze
     # A room in a balance's numeric(15,3) on hand, in stock units.
     ON_HAND_LIMIT = 10**Purchasing::OrderLine::QUANTITY_INTEGER_DIGITS
     # A cost per stock unit is numeric(19,6): 13 integer digits, 6 places.
@@ -48,7 +50,7 @@ module Purchasing
 
       result = nil
       ApplicationRecord.transaction do
-        ApplicationRecord.lease_connection.execute("SET LOCAL lock_timeout = '3s'")
+        ApplicationRecord.lease_connection.execute("SET LOCAL lock_timeout = '#{LOCK_TIMEOUT}'")
         result = perform
         raise ActiveRecord::Rollback unless result.success?
       end
@@ -88,7 +90,10 @@ module Purchasing
       # use, and the day is not before the order was approved.
       def row_errors(order, lines)
         fields = {}
-        fields["warehouse_id"] = [ "inactive" ] unless @warehouse.active?
+        # Read again inside the transaction: the instance was loaded before it. A
+        # deactivation racing this receipt is not waited for; stock that enters an
+        # instant before stays counted, and deactivating does not require it empty.
+        fields["warehouse_id"] = [ "inactive" ] unless Inventory::Warehouse.find(@warehouse.id).active?
         @input.items.each do |item|
           (fields["lines.#{item.index}.order_line_id"] ||= []) << "not_found" unless lines.key?(item.order_line_id)
         end
@@ -136,12 +141,16 @@ module Purchasing
         Entry.new(item:, line:, amounts:, last_unit_cost: cost)
       end
 
-      # The cost of what came in, per stock unit, to the place ADR 0006 names;
-      # a free line leaves the last cost alone (nil), so it never wipes it.
+      # The cost of what came in, per stock unit, to the place ADR 0006 names. A
+      # line worth nothing, or so little that its cost rounds to zero, leaves the
+      # last cost alone (nil), so it never wipes it: a cost of zero would value
+      # the next issue at nothing.
       def last_unit_cost(amounts)
         return unless amounts.net_cents.positive?
 
         scaled = Inventory::Costing.round_half_up(Rational(amounts.net_cents) / amounts.stock_quantity.to_r * 10**COST_PLACES)
+        return if scaled.zero?
+
         BigDecimal(scaled.to_s) / 10**COST_PLACES
       end
 
@@ -168,6 +177,7 @@ module Purchasing
         amounts = entry.amounts
         receipt_line = Purchasing::ReceiptLine.create!(
           organization: @organization, receipt:, order_id: line.order_id, order_line: line, product_id: line.product_id,
+          warehouse_id: receipt.warehouse_id,
           product_sku: line.product_sku, product_name: line.product_name, purchase_unit_code: line.purchase_unit_code,
           stock_unit_code: line.stock_unit_code, factor: line.factor, unit_price_cents: line.unit_price_cents,
           discount_bp: line.discount_bp, quantity: entry.item.quantity, stock_quantity: amounts.stock_quantity,
@@ -175,12 +185,16 @@ module Purchasing
         )
         Inventory::Ledger.post(balance:, kind: "receipt", quantity: amounts.stock_quantity, value_cents: amounts.net_cents,
                                actor: @actor, last_unit_cost: entry.last_unit_cost, receipt_line_id: receipt_line.id)
-        line.update!(
+        # Only the received figures move, and the database checks each against the
+        # line's own totals (and freezes everything else), so the model's
+        # validations, which reload three associations per line, add nothing here.
+        line.assign_attributes(
           received_quantity: line.received_quantity + entry.item.quantity,
           received_stock_quantity: line.received_stock_quantity + amounts.stock_quantity,
           received_gross_cents: line.received_gross_cents + amounts.gross_cents,
           received_discount_cents: line.received_discount_cents + amounts.discount_cents
         )
+        line.save!(validate: false)
       end
 
       # The supplier's invoice number is typed from a paper document: recorded as

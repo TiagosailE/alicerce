@@ -33,13 +33,13 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
     end
   end
 
-  def insert_receipt_line(receipt_id: receipt.id, order_id: order.id, order_line_id: order.lines.sole.id, product_id: product.id, quantity: 1, stock: 1,
-                          gross: 1_000, discount: 0, net: 1_000, bp: 0)
+  def insert_receipt_line(receipt_id: receipt.id, order_id: order.id, order_line_id: order.lines.sole.id, product_id: product.id, warehouse_id: warehouse.id,
+                          quantity: 1, stock: 1, gross: 1_000, discount: 0, net: 1_000, bp: 0)
     connection.transaction(requires_new: true) do
       connection.execute(<<~SQL)
-        INSERT INTO purchasing_receipt_lines (organization_id, receipt_id, order_id, order_line_id, product_id, product_sku, product_name,
+        INSERT INTO purchasing_receipt_lines (organization_id, receipt_id, order_id, order_line_id, product_id, warehouse_id, product_sku, product_name,
           purchase_unit_code, stock_unit_code, factor, unit_price_cents, discount_bp, quantity, stock_quantity, gross_cents, discount_cents, net_cents, created_at)
-        VALUES (#{organization.id}, #{receipt_id}, #{order_id}, #{order_line_id}, #{product_id}, 'S', 'P', 'SC', 'UN', 1, 1000, #{bp}, #{quantity}, #{stock},
+        VALUES (#{organization.id}, #{receipt_id}, #{order_id}, #{order_line_id}, #{product_id}, #{warehouse_id}, 'S', 'P', 'SC', 'UN', 1, 1000, #{bp}, #{quantity}, #{stock},
                 #{gross}, #{discount}, #{net}, now())
       SQL
     end
@@ -64,13 +64,13 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
     end
   end
 
-  def insert_movement(kind: "receipt", reason: nil, quantity: 5, receipt_line_id: "NULL")
+  def insert_movement(kind: "receipt", reason: nil, quantity: 5, receipt_line_id: "NULL", product_id: product.id, warehouse_id: warehouse.id)
     reason_sql = reason ? "'#{reason}'" : "NULL"
     connection.transaction(requires_new: true) do
       connection.execute(<<~SQL)
         INSERT INTO inventory_movements (organization_id, product_id, warehouse_id, kind, quantity, value_cents, on_hand_after, value_after_cents,
                                          reason, receipt_line_id, actor_user_id, created_at)
-        VALUES (#{organization.id}, #{product.id}, #{warehouse.id}, '#{kind}', #{quantity}, 500, 5, 500, #{reason_sql}, #{receipt_line_id}, #{actor.id}, now())
+        VALUES (#{organization.id}, #{product_id}, #{warehouse_id}, '#{kind}', #{quantity}, 500, 5, 500, #{reason_sql}, #{receipt_line_id}, #{actor.id}, now())
       SQL
     end
   end
@@ -133,6 +133,16 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
         .to raise_error(ActiveRecord::InvalidForeignKey, /fk_purchasing_receipt_lines_order_line_same_order/)
     end
 
+    it "is for its receipt's own warehouse" do
+      other_warehouse = create(:warehouse, organization:)
+      other = approved_order!(organization:, supplier:, actor:, lines: [ line_input(product, quantity: "3", unit_price_cents: 100) ])
+      insert_receipt(order_id: other.id, number: 301)
+      receipt_id = connection.select_value("SELECT id FROM purchasing_receipts WHERE number = 301").to_i
+
+      expect { insert_receipt_line(receipt_id:, order_id: other.id, order_line_id: other.lines.sole.id, warehouse_id: other_warehouse.id) }
+        .to raise_error(ActiveRecord::InvalidForeignKey, /fk_purchasing_receipt_lines_receipt_same_warehouse/)
+    end
+
     it "moves stock and keeps net equal to gross minus discount" do
       other = approved_order!(organization:, supplier:, actor:, lines: [ line_input(product, quantity: "3", unit_price_cents: 100) ])
       insert_receipt(order_id: other.id, number: 300)
@@ -150,9 +160,18 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
 
   describe "finance_titles" do
     it "gives a receipt at most one title, and a payable always has its receipt" do
-      expect { insert_title(receipt_id: receipt.id) }.to raise_error(ActiveRecord::RecordNotUnique, /index_finance_titles_on_receipt_id/)
+      expect { insert_title(receipt_id: receipt.id, total: receipt.total_cents) }.to raise_error(ActiveRecord::RecordNotUnique, /index_finance_titles_on_receipt_id/)
       expect { insert_title(receipt_id: nil) }.to raise_error(ActiveRecord::StatementInvalid, /finance_titles_payable_has_a_receipt/)
       expect { insert_title(kind: "receivable") }.not_to raise_error
+    end
+
+    it "is worth what its receipt cost: a payable of another amount is refused" do
+      other = approved_order!(organization:, supplier:, actor:, lines: [ line_input(product, quantity: "3", unit_price_cents: 100) ])
+      insert_receipt(order_id: other.id, number: 302, total: 250)
+      receipt_id = connection.select_value("SELECT id FROM purchasing_receipts WHERE number = 302").to_i
+
+      expect { insert_title(receipt_id:, total: 249) }.to raise_error(ActiveRecord::StatementInvalid, /a payable of 249 does not match its receipt of 250/)
+      expect { insert_title(receipt_id:, total: 250) }.not_to raise_error
     end
 
     it "is worth something and knows its kinds and states" do
@@ -254,8 +273,24 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
       expect { insert_movement(receipt_line_id: line_id) }.to raise_error(ActiveRecord::RecordNotUnique, /index_inventory_movements_on_receipt_line_id/)
     end
 
+    it "is the movement of the balance its receipt line is for: another product or another warehouse is refused, however valid the line" do
+      other_product = orderable_product(organization, sku: "OUT-001")
+      other_warehouse = create(:warehouse, organization:)
+      other = approved_order!(organization:, supplier:, actor:, lines: [ line_input(product, quantity: "3", unit_price_cents: 100) ])
+      insert_receipt(order_id: other.id, number: 303)
+      receipt_id = connection.select_value("SELECT id FROM purchasing_receipts WHERE number = 303").to_i
+      insert_receipt_line(receipt_id:, order_id: other.id, order_line_id: other.lines.sole.id)
+      fresh_line_id = connection.select_value("SELECT max(id) FROM purchasing_receipt_lines").to_i
+
+      expect { insert_movement(receipt_line_id: fresh_line_id, product_id: other_product.id) }
+        .to raise_error(ActiveRecord::InvalidForeignKey, /fk_inventory_movements_receipt_line_same_balance/)
+      expect { insert_movement(receipt_line_id: fresh_line_id, warehouse_id: other_warehouse.id) }
+        .to raise_error(ActiveRecord::InvalidForeignKey, /fk_inventory_movements_receipt_line_same_balance/)
+      expect { insert_movement(receipt_line_id: fresh_line_id) }.not_to raise_error
+    end
+
     it "points at a receipt line of its own organization only" do
-      expect { insert_movement(receipt_line_id: 0) }.to raise_error(ActiveRecord::InvalidForeignKey, /fk_inventory_movements_receipt_line_same_organization/)
+      expect { insert_movement(receipt_line_id: 0) }.to raise_error(ActiveRecord::InvalidForeignKey, /fk_inventory_movements_receipt_line_same_balance/)
     end
   end
 end

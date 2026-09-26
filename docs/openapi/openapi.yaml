@@ -2234,8 +2234,11 @@ components:
         lines:
           type: array
           minItems: 1
-          maxItems: 200
-          description: One entry per order line, at most once each.
+          maxItems: 50
+          description: >
+            One entry per order line, at most once each. More than 50 is a
+            validation_failed (too_many): an order with more open lines is received
+            in more than one receipt.
           items: { $ref: "#/components/schemas/ReceiptLineInput" }
 
     ReceiptLineInput:

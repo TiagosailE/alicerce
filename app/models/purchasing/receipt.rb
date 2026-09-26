@@ -8,6 +8,10 @@ module Purchasing
   class Receipt < ApplicationRecord
     include TenantScoped
 
+    # A receipt holds its whole write phase under the receipt counter's lock, at
+    # about a dozen statements a line, so an order with more open lines than this
+    # is received in more than one receipt.
+    MAX_LINES = 50
     SUPPLIER_INVOICE_MAX_LENGTH = 60
     SUPPLIER_INVOICE_FORMAT = %r{\A[[:alnum:]][[:alnum:] ./-]*\z}
     # An invoice number is a few digits plus a series; the 44 digits of an NF-e

@@ -168,4 +168,31 @@ RSpec.describe "concurrent receipts (ADR 0004, ADR 0005, ADR 0017)" do
     expect_ledger_to_add_up(@cement)
     expect(balance(@cement).on_hand).to eq(BigDecimal(count.success? ? "60" : "50"))
   end
+
+  it "answers conflict_retry and writes nothing when another transaction holds the order past the lock timeout" do
+    order = new_order(@cement)
+    held = Queue.new
+    release = Queue.new
+    holder = Thread.new do
+      set_current_tenant(@organization)
+      ApplicationRecord.transaction do
+        Purchasing::Order.lock("FOR NO KEY UPDATE").find(order.id)
+        held << true
+        release.pop
+      end
+    end
+    held.pop
+    stub_const("Purchasing::ReceiveGoods::LOCK_TIMEOUT", "150ms")
+
+    result = receive_job(order, [ "10" ], key: "receive-timeout-1").call
+    release << true
+    holder.join
+
+    expect(result.error).to eq(:conflict_retry)
+    set_current_tenant(@organization)
+    expect([ Purchasing::Receipt.count, Inventory::Movement.count, Finance::Title.count ]).to eq([ 0, 0, 0 ])
+    expect(IdempotencyKey.where(key: "receive-timeout-1")).to be_empty
+    # The same request, once the order is free, goes through with the same key.
+    expect(receive_job(order, [ "10" ], key: "receive-timeout-1").call).to be_success
+  end
 end
