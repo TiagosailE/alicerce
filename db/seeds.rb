@@ -73,6 +73,18 @@ def seed_product(organization, sku:, name:, stock_unit:, purchase_unit:, factor:
   product
 end
 
+# Opening stock (slice 3) goes through the real command, so the balances, the
+# ledger and the average cost come out exactly as they would in use. The key is
+# derived from the ids, so running the seeds again replays instead of adding
+# stock a second time. unit_cost is in cents per stock unit (ADR 0016).
+def seed_stock(organization, actor:, product:, warehouse:, quantity:, unit_cost:)
+  result = Inventory::AdjustStock.call(
+    organization:, actor:, product:, warehouse:, counted_quantity: quantity, reason: "opening_balance", unit_cost:,
+    idempotency_key: "seed-#{organization.id}-#{product.id}-#{warehouse.id}", request_digest: "seed-opening-balance"
+  )
+  raise "Seeding stock failed: #{result.error} #{result.details}" unless result.success?
+end
+
 Current.organization = canion
 unidade = seed_unit(canion, code: "UN", name: "Unidade")
 saco = seed_unit(canion, code: "SC", name: "Saco")
@@ -84,15 +96,25 @@ cimento_categoria = seed_category(canion, name: "Cimento e argamassa")
 ferragens_categoria = seed_category(canion, name: "Ferragens")
 alvenaria_categoria = seed_category(canion, name: "Alvenaria e agregados")
 
-seed_product(canion, sku: "CIM-001", name: "Cimento CP II-32 (saco 50kg)",
+cimento = seed_product(canion, sku: "CIM-001", name: "Cimento CP II-32 (saco 50kg)",
   stock_unit: unidade, purchase_unit: saco, factor: 1, category: cimento_categoria)
-seed_product(canion, sku: "VER-001", name: "Vergalhão CA-50 8mm (barra 12m)",
+vergalhao = seed_product(canion, sku: "VER-001", name: "Vergalhão CA-50 8mm (barra 12m)",
   stock_unit: unidade, purchase_unit: barra, factor: 1, category: ferragens_categoria)
-seed_product(canion, sku: "TIJ-001", name: "Tijolo comum 8 furos",
+tijolo = seed_product(canion, sku: "TIJ-001", name: "Tijolo comum 8 furos",
   stock_unit: unidade, purchase_unit: milheiro, factor: 1000, category: alvenaria_categoria)
 
-seed_warehouse(canion, name: "Loja")
-seed_warehouse(canion, name: "Pátio")
+loja = seed_warehouse(canion, name: "Loja")
+patio = seed_warehouse(canion, name: "Pátio")
+
+# A brick costs 84.99 cents (R$ 849,90 the thousand): the fractional cost is why
+# the unit cost is a decimal string and the value is rounded once, half up.
+joana = Identity::User.find_by!(email: "joana.lima@canion.example")
+seed_stock(canion, actor: joana, product: cimento, warehouse: loja, quantity: "120", unit_cost: "3250")
+seed_stock(canion, actor: joana, product: cimento, warehouse: patio, quantity: "300", unit_cost: "3180")
+seed_stock(canion, actor: joana, product: vergalhao, warehouse: loja, quantity: "80", unit_cost: "5490")
+seed_stock(canion, actor: joana, product: vergalhao, warehouse: patio, quantity: "150", unit_cost: "5390")
+seed_stock(canion, actor: joana, product: tijolo, warehouse: patio, quantity: "12000", unit_cost: "84.99")
+seed_stock(canion, actor: joana, product: tijolo, warehouse: loja, quantity: "2500", unit_cost: "84.99")
 
 # Fictitious, check-digit-valid documents (docs/scope.md), generated once
 # with DocumentNumberGenerator and hardcoded so db:seed stays idempotent;
@@ -108,9 +130,11 @@ Current.organization = serra
 serra_unidade = seed_unit(serra, code: "UN", name: "Unidade")
 serra_caixa = seed_unit(serra, code: "CX", name: "Caixa")
 serra_categoria = seed_category(serra, name: "Ferragens")
-seed_product(serra, sku: "DOB-001", name: "Dobradiça 3\" cromada",
+dobradica = seed_product(serra, sku: "DOB-001", name: "Dobradiça 3\" cromada",
   stock_unit: serra_unidade, purchase_unit: serra_caixa, factor: 12, category: serra_categoria)
-seed_warehouse(serra, name: "Depósito")
+deposito = seed_warehouse(serra, name: "Depósito")
+seed_stock(serra, actor: Identity::User.find_by!(email: "pedro.rocha@serradourada.example"), product: dobradica,
+  warehouse: deposito, quantity: "480", unit_cost: "1290")
 
 seed_partner(serra, name: "Metalúrgica Dourada Ltda", document_type: "cnpj", document_number: "38129140898710",
   supplier: true, email: "vendas@metalurgicadourada.example", phone: "+55 11 3333-4000")

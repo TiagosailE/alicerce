@@ -43,6 +43,19 @@ module Identity
       membership.present?
     end
 
+    # ADR 0016: every role can read balances and the movement ledger (sales
+    # needs available stock, finance the value); adjusting is owner, admin and
+    # purchasing (ADR 0008's matrix), and read_only reads.
+    def view_stock?(membership)
+      membership.present?
+    end
+
+    def adjust_stock?(membership)
+      return false unless membership
+
+      %w[owner admin purchasing].include?(membership.role)
+    end
+
     # ADR 0014: the full CPF, e-mail and phone of a partner are personal
     # data, so read_only sees them masked or absent; every role that works
     # with customers and suppliers sees them.

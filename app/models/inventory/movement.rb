@@ -1,0 +1,20 @@
+module Inventory
+  # A row of the immutable ledger (ADR 0016): a signed quantity and value, and
+  # the balance right after it. The database stops UPDATE and DELETE (the app
+  # role has neither privilege and a trigger stops everyone but the owner);
+  # readonly? here is the same rule one layer earlier. A mistake is corrected
+  # by a new movement, never by an edit.
+  class Movement < ApplicationRecord
+    include TenantScoped
+
+    KINDS = %w[adjustment].freeze
+    ADJUSTMENT_REASONS = %w[opening_balance count loss damage theft expiry found other].freeze
+    NOTE_MAX_LENGTH = 500
+
+    belongs_to :product, class_name: "Catalog::Product"
+    belongs_to :warehouse, class_name: "Inventory::Warehouse"
+    belongs_to :actor_user, class_name: "Identity::User"
+
+    def readonly? = persisted? || super
+  end
+end

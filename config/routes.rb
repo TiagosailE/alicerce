@@ -11,6 +11,9 @@ Rails.application.routes.draw do
       resources :categories, only: %i[index show create update]
       resources :products, only: %i[index show create update]
       resources :warehouses, only: %i[index show create update]
+      resources :stock_balances, only: :index
+      resources :stock_movements, only: :index
+      resources :stock_adjustments, only: :create
       resources :partners, only: %i[index show create update]
       resources :invitations, only: %i[create index destroy]
       # The token is the credential; it travels in the body, never the URL

@@ -26,7 +26,7 @@ module Catalog
 
       ApplicationRecord.transaction do
         ApplicationRecord.lease_connection.execute("SET LOCAL lock_timeout = '3s'")
-        @product.lock!
+        @product.lock!("FOR NO KEY UPDATE")
         if @product.revision != @revision
           result = Result.failure(:stale, current_revision: @product.revision)
           raise ActiveRecord::Rollback
