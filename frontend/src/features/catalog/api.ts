@@ -6,6 +6,7 @@ export type Unit = components["schemas"]["Unit"];
 export type Category = components["schemas"]["Category"];
 export type Product = components["schemas"]["Product"];
 export type Partner = components["schemas"]["Partner"];
+export type PartnerSummary = components["schemas"]["PartnerSummary"];
 
 export interface ProductFilters {
   categoryId?: number;
@@ -156,7 +157,7 @@ export function usePartners(page: number, filters: PartnerFilters = {}) {
   return useQuery({
     queryKey: partnersKey(page, filters),
     queryFn: async () =>
-      unwrapList<Partner>(
+      unwrapList<PartnerSummary>(
         await api.GET("/partners", {
           params: {
             query: {

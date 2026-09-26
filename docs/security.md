@@ -109,7 +109,7 @@ Personal data map: what is held, where, why and its retention.
 | Control | Status | Evidence |
 |---|---|---|
 | Personal data map (what, where, why, retention) | in place | the table above |
-| Minimization: only data the flows need; no personal data in audit values | in place | ADR 0010, `Catalog::Partner::PERSONAL_DATA_FIELDS`, `Catalog::CreatePartner`, `Catalog::UpdatePartner` |
+| Minimization: only data the flows need; no personal data in audit values; partner lists carry a masked CPF and no e-mail or phone, and read_only sees neither in full | in place; reveals are not audited | ADR 0010, ADR 0014, `Catalog::Partner::PERSONAL_DATA_FIELDS`, `Catalog::PartnerSummarySerializer`, `Catalog::PartnerSerializer`, `spec/requests/api/v1/partners_spec.rb` |
 | CPF and CNPJ encrypted at rest (Active Record encryption, deterministic for lookups) | in place | ADR 0012, `Catalog::Partner`, `config/initializers/active_record_encryption.rb` |
 | Export and anonymization on request of the data subject; retention jobs | designed, Milestone 2 | `docs/scope.md` |
 | Seeds, tests and screenshots use generated people and documents only | in place | `docs/scope.md`, `DocumentNumberGenerator`, `db/seeds.rb` |

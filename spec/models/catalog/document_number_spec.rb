@@ -79,4 +79,19 @@ RSpec.describe Catalog::DocumentNumber do
       expect(described_class.normalize("12.abc.345/01de-35")).to eq("12ABC34501DE35")
     end
   end
+
+  describe ".mask" do
+    it "keeps only the middle six digits of a CPF" do
+      expect(described_class.mask("cpf", "52998224725")).to eq("***982247**")
+    end
+
+    it "leaves a CNPJ, which is public registry data, untouched" do
+      expect(described_class.mask("cnpj", "11222333000181")).to eq("11222333000181")
+      expect(described_class.mask("cnpj", "12ABC34501DE35")).to eq("12ABC34501DE35")
+    end
+
+    it "does not guess at a value that is not a well formed CPF" do
+      expect(described_class.mask("cpf", "123")).to eq("123")
+    end
+  end
 end

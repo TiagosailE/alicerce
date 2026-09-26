@@ -21,6 +21,16 @@ module Catalog
       value.to_s.gsub(/[^0-9A-Za-z]/, "").upcase
     end
 
+    # A CPF identifies a person, so a list or a viewer without the right to see
+    # it gets the middle six digits only (the shape the government's own
+    # portals use). A CNPJ is public registry data, so masking it would cost
+    # usability and protect nothing.
+    def self.mask(type, value)
+      return value unless type.to_s == "cpf" && value.to_s.length == CPF_LENGTH
+
+      "***#{value[3, 6]}**"
+    end
+
     def self.valid?(type, value)
       case type.to_s
       when "cpf" then valid_cpf?(value)

@@ -1407,10 +1407,33 @@ components:
         name: { type: string }
         active: { type: boolean }
 
+    PartnerSummary:
+      type: object
+      description: >
+        A partner as listed (ADR 0014). The CPF is masked for every role and
+        e-mail and phone are not part of a list; the full record comes from
+        GET /partners/{id}.
+      additionalProperties: false
+      required: [ id, name, document_type, document_number, customer, supplier, active ]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        document_type:
+          type: string
+          enum: [ cpf, cnpj ]
+        document_number:
+          type: string
+          description: >
+            A CPF with only the middle six digits visible ("***982247**"); a
+            CNPJ in full, since it is public registry data.
+        customer: { type: boolean }
+        supplier: { type: boolean }
+        active: { type: boolean }
+
     Partner:
       type: object
       additionalProperties: false
-      required: [ id, name, document_type, document_number, customer, supplier, email, phone, active ]
+      required: [ id, name, document_type, document_number, customer, supplier, email, phone, personal_data_visible, active ]
       properties:
         id: { type: integer }
         name: { type: string }
@@ -1421,15 +1444,23 @@ components:
           type: string
           description: >
             Digits only for a CPF; digits and upper-case letters for a CNPJ
-            (ADR 0012, alphanumeric since July 2026). No punctuation.
+            (ADR 0012, alphanumeric since July 2026). No punctuation. A CPF is
+            masked as in PartnerSummary when personal_data_visible is false.
         customer: { type: boolean }
         supplier: { type: boolean }
         email:
           type: string
           nullable: true
+          description: Always null when personal_data_visible is false.
         phone:
           type: string
           nullable: true
+          description: Always null when personal_data_visible is false.
+        personal_data_visible:
+          type: boolean
+          description: >
+            False when the caller's role may not see this partner's CPF,
+            e-mail and phone in full (ADR 0014: read_only).
         active: { type: boolean }
 
     PartnerResponseBody:
@@ -1447,7 +1478,7 @@ components:
       properties:
         data:
           type: array
-          items: { $ref: "#/components/schemas/Partner" }
+          items: { $ref: "#/components/schemas/PartnerSummary" }
         meta:
           $ref: "#/components/schemas/Meta"
 

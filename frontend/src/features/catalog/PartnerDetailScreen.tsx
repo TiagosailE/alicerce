@@ -87,11 +87,19 @@ export function PartnerDetailScreen({ canManage }: { canManage: boolean }) {
               />
               <ReadOnlyField
                 label={t("partners.emailLabel")}
-                value={partner.data.email ?? t("partners.notInformed")}
+                value={
+                  partner.data.personal_data_visible
+                    ? (partner.data.email ?? t("partners.notInformed"))
+                    : t("partners.restricted")
+                }
               />
               <ReadOnlyField
                 label={t("partners.phoneLabel")}
-                value={partner.data.phone ?? t("partners.notInformed")}
+                value={
+                  partner.data.personal_data_visible
+                    ? (partner.data.phone ?? t("partners.notInformed"))
+                    : t("partners.restricted")
+                }
               />
               <ReadOnlyField
                 label={t("partners.activeLabel")}

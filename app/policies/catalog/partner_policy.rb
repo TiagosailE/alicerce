@@ -5,6 +5,12 @@ module Catalog
     def create? = manage_master_data?
     def update? = manage_master_data?
 
+    # Not an action: whether the response for this partner carries the
+    # personal fields in full (ADR 0014).
+    def view_personal_data?
+      Identity::Capabilities.view_partner_personal_data?(user&.membership_in(Current.organization))
+    end
+
     class Scope < ApplicationPolicy::Scope
       def resolve
         view_master_data? ? scope.all : scope.none

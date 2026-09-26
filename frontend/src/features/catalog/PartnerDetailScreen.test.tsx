@@ -40,6 +40,7 @@ function partner(overrides: Partial<Partner> = {}): Partner {
     supplier: false,
     email: "marcos@example.com",
     phone: "71999990000",
+    personal_data_visible: true,
     active: true,
     ...overrides,
   };
@@ -123,6 +124,30 @@ describe("PartnerDetailScreen", () => {
     expect(screen.queryByLabelText("Nome")).not.toBeInTheDocument();
     expect(screen.getByText("52998224725")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Salvar alterações" })).not.toBeInTheDocument();
+  });
+
+  it("says the contact data is restricted, instead of not informed, when the API hides it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /partners/42": () =>
+          jsonResponse({
+            data: partner({
+              document_number: "***982247**",
+              email: null,
+              phone: null,
+              personal_data_visible: false,
+            }),
+          }),
+      }),
+    );
+
+    renderScreen(false);
+
+    await screen.findByRole("heading", { name: "Marcos Pereira" });
+    expect(screen.getByText("***982247**")).toBeInTheDocument();
+    expect(screen.getAllByText("Restrito ao seu perfil")).toHaveLength(2);
+    expect(screen.queryByText("Não informado")).not.toBeInTheDocument();
   });
 
   it("updates the partner", async () => {
