@@ -2,7 +2,7 @@ import { type SubmitEvent, useId, useState } from "react";
 import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
-import { isStale, requestIdSuffix } from "../../lib/errors";
+import { apiFieldErrors, fieldErrorMessage, isStale, requestIdSuffix } from "../../lib/errors";
 import { type MessageKey, t } from "../../i18n";
 import type { Partner, PartnerInput } from "./api";
 
@@ -24,21 +24,6 @@ const FIELD_ERROR_KEYS: Record<string, Partial<Record<string, MessageKey>>> = {
   },
   base: { must_be_customer_or_supplier: "partners.fieldErrorMustBeCustomerOrSupplier" },
 };
-
-function apiFieldErrors(error: unknown): Record<string, string[]> {
-  if (!(error instanceof ApiError) || error.code !== "validation_failed") return {};
-  const fields: unknown = error.details.fields;
-  if (!fields || typeof fields !== "object") return {};
-  return fields as Record<string, string[]>;
-}
-
-function fieldErrorMessage(fieldErrors: Record<string, string[]>, field: string): string | null {
-  const kinds = fieldErrors[field];
-  const kind = kinds?.[0];
-  if (!kind) return null;
-  const key = FIELD_ERROR_KEYS[field]?.[kind];
-  return key ? t(key) : t("partners.fieldErrorGeneric");
-}
 
 // The backend does not validate email format at all (app/models/catalog/
 // partner.rb): a free-text field the API happily stores as typed. This is
@@ -115,10 +100,30 @@ export function PartnerForm({
   const emailErrorId = useId();
 
   const fieldErrors = isError ? apiFieldErrors(error) : {};
-  const nameError = fieldErrorMessage(fieldErrors, "name");
-  const documentTypeError = fieldErrorMessage(fieldErrors, "document_type");
-  const documentNumberError = fieldErrorMessage(fieldErrors, "document_number");
-  const customerOrSupplierError = fieldErrorMessage(fieldErrors, "base");
+  const nameError = fieldErrorMessage(
+    fieldErrors,
+    "name",
+    FIELD_ERROR_KEYS,
+    "partners.fieldErrorGeneric",
+  );
+  const documentTypeError = fieldErrorMessage(
+    fieldErrors,
+    "document_type",
+    FIELD_ERROR_KEYS,
+    "partners.fieldErrorGeneric",
+  );
+  const documentNumberError = fieldErrorMessage(
+    fieldErrors,
+    "document_number",
+    FIELD_ERROR_KEYS,
+    "partners.fieldErrorGeneric",
+  );
+  const customerOrSupplierError = fieldErrorMessage(
+    fieldErrors,
+    "base",
+    FIELD_ERROR_KEYS,
+    "partners.fieldErrorGeneric",
+  );
   const emailError =
     submitAttempted && email.trim() && !isValidEmail(email.trim())
       ? t("partners.fieldErrorEmailInvalid")

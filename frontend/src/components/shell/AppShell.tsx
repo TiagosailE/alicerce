@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink, matchPath, useLocation } from "react-router-dom";
 import { BrandMark } from "../ui/BrandMark";
 import { Button } from "../ui/Button";
 import { Spinner } from "../ui/Spinner";
@@ -20,6 +20,14 @@ export function AppShell({
   children: ReactNode;
 }) {
   const signOut = useSignOut();
+  // The stock area is two pages (/estoque and /estoque/movimentacoes) that
+  // share a nav link, while products and warehouses live under the same
+  // /estoque prefix and have their own: a prefix match would light up all of
+  // them, so the link is active only for the stock area's own two paths.
+  const { pathname } = useLocation();
+  const stockActive =
+    matchPath({ path: "/estoque", end: true }, pathname) !== null ||
+    matchPath({ path: "/estoque/movimentacoes", end: false }, pathname) !== null;
 
   return (
     <div className="flex min-h-screen flex-col bg-surface">
@@ -36,6 +44,13 @@ export function AppShell({
             three nav links plus a long organization name could push the
             sign-out button off screen with no way to reach it. */}
         <nav className="ml-4 flex min-w-0 items-center gap-3 overflow-x-auto text-sm">
+          <Link
+            to="/estoque"
+            className={`shrink-0 rounded-md px-2 py-1 ${stockActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`}
+            aria-current={stockActive ? "page" : undefined}
+          >
+            {t("shell.navStock")}
+          </Link>
           <NavLink
             to="/estoque/produtos"
             className={({ isActive }) =>
