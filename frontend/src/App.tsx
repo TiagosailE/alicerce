@@ -11,6 +11,12 @@ import { MembersScreen } from "./features/identity/MembersScreen";
 import { StockMovementsScreen } from "./features/inventory/StockMovementsScreen";
 import { StockScreen } from "./features/inventory/StockScreen";
 import { WarehousesScreen } from "./features/inventory/WarehousesScreen";
+import {
+  EditPurchaseOrderScreen,
+  NewPurchaseOrderScreen,
+} from "./features/purchasing/PurchaseOrderFormScreen";
+import { PurchaseOrderDetailScreen } from "./features/purchasing/PurchaseOrderDetailScreen";
+import { PurchaseOrdersScreen } from "./features/purchasing/PurchaseOrdersScreen";
 import { SignInScreen } from "./features/identity/SignInScreen";
 import { t } from "./i18n";
 
@@ -80,6 +86,11 @@ export function App() {
   const canAdjustStock = canManageMasterData;
   // Mirrors Identity::Capabilities.view_stock_movements? (every role but sales).
   const canViewLedger = Boolean(membership && membership.role !== "sales");
+  // Mirrors Identity::Capabilities.view_purchasing? (ADR 0017: every role but
+  // sales reads purchase orders) and manage_purchasing? (owner, admin and
+  // purchasing write them). UX only: the API decides.
+  const canViewPurchasing = canViewLedger;
+  const canManagePurchasing = canManageMasterData;
 
   return (
     <Routes>
@@ -95,6 +106,7 @@ export function App() {
               organizationName={membership.organization.name}
               userName={user.name}
               canManageMembers={canManageMembers}
+              canViewPurchasing={canViewPurchasing}
             >
               <Routes>
                 <Route path="/" element={<HomeScreen userName={user.name} />} />
@@ -125,6 +137,24 @@ export function App() {
                   path="/estoque/depositos"
                   element={<WarehousesScreen canManage={canManageMasterData} />}
                 />
+                {canViewPurchasing && (
+                  <>
+                    <Route
+                      path="/compras"
+                      element={<PurchaseOrdersScreen canManage={canManagePurchasing} />}
+                    />
+                    {canManagePurchasing && (
+                      <>
+                        <Route path="/compras/novo" element={<NewPurchaseOrderScreen />} />
+                        <Route path="/compras/:id/editar" element={<EditPurchaseOrderScreen />} />
+                      </>
+                    )}
+                    <Route
+                      path="/compras/:id"
+                      element={<PurchaseOrderDetailScreen canManage={canManagePurchasing} />}
+                    />
+                  </>
+                )}
                 <Route
                   path="/parceiros"
                   element={<PartnersScreen canManage={canManageMasterData} />}

@@ -12,11 +12,13 @@ export function AppShell({
   organizationName,
   userName,
   canManageMembers,
+  canViewPurchasing,
   children,
 }: {
   organizationName: string;
   userName: string;
   canManageMembers: boolean;
+  canViewPurchasing: boolean;
   children: ReactNode;
 }) {
   const signOut = useSignOut();
@@ -67,6 +69,16 @@ export function AppShell({
           >
             {t("shell.navWarehouses")}
           </NavLink>
+          {canViewPurchasing && (
+            <NavLink
+              to="/compras"
+              className={({ isActive }) =>
+                `shrink-0 rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
+              }
+            >
+              {t("shell.navPurchasing")}
+            </NavLink>
+          )}
           <NavLink
             to="/parceiros"
             className={({ isActive }) =>

@@ -87,3 +87,53 @@ export function formatDateTime(iso: string): string {
     new Date(iso),
   );
 }
+
+/** What a person typed as a percentage ("2", "2,5", "0,25 %") as the whole
+ * basis points the API expects ("200", "250", "25"), by moving the decimal
+ * point two places in the text. No arithmetic, so no rounding: a value with
+ * more than two places, or one that is not a number, is null. */
+export function percentToBasisPoints(text: string): string | null {
+  const parsed = parseDecimalInput(text.replace(/\s*%\s*$/, ""));
+  if (parsed === null) return null;
+
+  const [whole = "0", fraction = ""] = parsed.split(".");
+  if (fraction.replace(/0+$/, "").length > 2) return null;
+  return `${whole}${fraction.padEnd(2, "0").slice(0, 2)}`.replace(/^0+(?=\d)/, "");
+}
+
+const percentFormat = new Intl.NumberFormat("pt-BR", {
+  style: "percent",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+/** Basis points from the API ("200") as a percentage ("2%"). The E-4 exponent
+ * in the text turns basis points into a fraction with no division. */
+export function formatBasisPoints(basisPoints: number): string {
+  return percentFormat.format(`${String(basisPoints)}E-4` as unknown as number);
+}
+
+/** A calendar day from the API ("2026-09-26") as the person reads it. It is
+ * formatted from its own parts, never through a Date at midnight UTC, which
+ * would show the day before west of Greenwich. */
+export function formatDate(isoDate: string): string {
+  const [year = "", month = "", day = ""] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+/** Whole cents from the API (3250) as what the price field takes ("32,50"),
+ * by placing the comma in the text, ungrouped so it reads back unambiguously
+ * through reaisToCents. */
+export function centsToReaisInput(cents: number): string {
+  const digits = String(cents).padStart(3, "0");
+  return `${digits.slice(0, -2)},${digits.slice(-2)}`;
+}
+
+/** Basis points from the API (250) as what the discount field takes ("2,5"),
+ * the inverse of percentToBasisPoints. */
+export function basisPointsToPercentInput(basisPoints: number): string {
+  const digits = String(basisPoints).padStart(3, "0");
+  const fraction = digits.slice(-2).replace(/0+$/, "");
+  const whole = digits.slice(0, -2);
+  return fraction ? `${whole},${fraction}` : whole;
+}
