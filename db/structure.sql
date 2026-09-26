@@ -372,6 +372,41 @@ ALTER SEQUENCE public.catalog_units_id_seq OWNED BY public.catalog_units.id;
 
 
 --
+-- Name: document_counters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.document_counters (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    kind character varying NOT NULL,
+    last_value bigint DEFAULT 0 NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT document_counters_kind_valid CHECK (((kind)::text = ANY ((ARRAY['purchase_order'::character varying, 'receipt'::character varying])::text[]))),
+    CONSTRAINT document_counters_last_value_not_negative CHECK ((last_value >= 0))
+);
+
+
+--
+-- Name: document_counters_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.document_counters_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: document_counters_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.document_counters_id_seq OWNED BY public.document_counters.id;
+
+
+--
 -- Name: idempotency_keys; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1236,6 +1271,13 @@ ALTER TABLE ONLY public.catalog_units ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
+-- Name: document_counters id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_counters ALTER COLUMN id SET DEFAULT nextval('public.document_counters_id_seq'::regclass);
+
+
+--
 -- Name: idempotency_keys id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1450,6 +1492,14 @@ ALTER TABLE ONLY public.catalog_unit_conversions
 
 ALTER TABLE ONLY public.catalog_units
     ADD CONSTRAINT catalog_units_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: document_counters document_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_counters
+    ADD CONSTRAINT document_counters_pkey PRIMARY KEY (id);
 
 
 --
@@ -1789,6 +1839,20 @@ CREATE UNIQUE INDEX index_catalog_units_on_organization_id_and_code ON public.ca
 --
 
 CREATE UNIQUE INDEX index_catalog_units_on_organization_id_and_id ON public.catalog_units USING btree (organization_id, id);
+
+
+--
+-- Name: index_document_counters_on_organization_and_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_document_counters_on_organization_and_kind ON public.document_counters USING btree (organization_id, kind);
+
+
+--
+-- Name: index_document_counters_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_document_counters_on_organization_id ON public.document_counters USING btree (organization_id);
 
 
 --
@@ -2429,6 +2493,14 @@ ALTER TABLE ONLY public.catalog_products
 
 
 --
+-- Name: document_counters fk_rails_608f5718eb; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.document_counters
+    ADD CONSTRAINT fk_rails_608f5718eb FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: inventory_movements fk_rails_64b9a559ef; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2651,6 +2723,19 @@ CREATE POLICY catalog_units_tenant_isolation ON public.catalog_units USING ((org
 
 
 --
+-- Name: document_counters; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.document_counters ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: document_counters document_counters_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY document_counters_tenant_isolation ON public.document_counters USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
 -- Name: idempotency_keys; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2722,6 +2807,7 @@ CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehous
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926140000'),
 ('20260926130000'),
 ('20260926120400'),
 ('20260926120300'),
