@@ -263,6 +263,16 @@ RSpec.describe Purchasing::ReceiveGoods do
       expect(receive_goods(order, [ item(line, "1") ], key: "short").details[:fields]).to eq("idempotency_key" => [ "invalid" ])
     end
 
+    it "an invoice number that is not one: characters outside the usual, or a long run of digits such as an NF-e access key" do
+      line = order.lines.sole
+      access_key = "29260912345678000199550010000012341000012345"
+
+      [ access_key, "NF #123", "NF\n1", "-1234", "1" * 16 ].each do |invoice|
+        expect(receive_goods(order, [ item(line, "1") ], invoice:).details[:fields]).to eq("supplier_invoice_number" => [ "invalid" ]), "expected #{invoice.inspect} to be refused"
+      end
+      expect(receive_goods(order, [ item(line, "1") ], invoice: "NF 1234/1-A.2")).to be_success
+    end
+
     it "a balance already below zero, which a receipt does not settle yet" do
       Inventory::Balance.create!(organization:, product: cimento, warehouse:, on_hand: BigDecimal("-3"), value_cents: -900, negative_allowance: BigDecimal("10"))
 
@@ -333,6 +343,17 @@ RSpec.describe Purchasing::ReceiveGoods do
       expect(again.value.id).to eq(first.value.id)
       expect([ Purchasing::Receipt.count, Inventory::Movement.count, Finance::Title.count ]).to eq([ 1, 1, 1 ])
       expect(balance_of(cimento).on_hand).to eq(BigDecimal("50"))
+    end
+
+    it "replays a request that succeeded even when the warehouse was deactivated since" do
+      params = [ item(order.lines.sole, "50") ]
+      first = receive_goods(order, params, key: "receive-0009")
+      warehouse.update!(active: false)
+
+      again = receive_goods(order, params, key: "receive-0009")
+
+      expect(again).to be_success
+      expect(again.value.id).to eq(first.value.id)
     end
 
     it "refuses the same key for a different request" do

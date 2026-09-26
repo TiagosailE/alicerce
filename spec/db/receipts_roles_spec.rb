@@ -80,4 +80,14 @@ RSpec.describe "Receipts, as a role that holds the privileges but does not own t
     expect { as_probe("TRUNCATE purchasing_receipt_lines", dropping: RECEIPT_LINE_REFERENCES) }
       .to raise_error(PG::RaiseException, /purchasing_receipt_lines is append-only: TRUNCATE is not permitted/)
   end
+
+  it "refuses a deletion that would leave a title's installments short of its total, even from a role that may delete" do
+    title_id = @receipt.title.id
+
+    @owner.exec("BEGIN")
+    @owner.exec("DELETE FROM finance_installments WHERE title_id = #{title_id}")
+    expect { @owner.exec("SET CONSTRAINTS ALL IMMEDIATE") }.to raise_error(PG::RaiseException, /add up to 0, not to its total of/)
+  ensure
+    @owner.exec("ROLLBACK")
+  end
 end

@@ -2,8 +2,11 @@ module Inventory
   # Only whoever may read the ledger (Identity::Capabilities.view_stock_movements?)
   # ever gets to serialize a movement, and they see values, notes and actors in full.
   class MovementSerializer
-    def initialize(movement)
+    # The receipt a receipt movement points at is purchasing information, read
+    # under its own capability, so the caller says whether this reader may see it.
+    def initialize(movement, receipt_visible: false)
       @movement = movement
+      @receipt_visible = receipt_visible
     end
 
     def as_json
@@ -28,6 +31,8 @@ module Inventory
     private
       # The receipt a receipt movement came from, so the ledger can point at it.
       def receipt
+        return unless @receipt_visible
+
         receipt = @movement.receipt_line&.receipt
         receipt && { id: receipt.id, number: receipt.number }
       end

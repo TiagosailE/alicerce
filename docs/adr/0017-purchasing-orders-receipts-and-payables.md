@@ -265,7 +265,27 @@ free-text `note` and `supplier_invoice_number` are filtered from request logs.
   purchasing receives and reads the receipt without it, as the matrix above says.
 - `GET /stock_movements` gains `receipt: { id, number }` on a receipt movement, so
   the ledger can point at the document that caused it.
-- Rate limits for receipts count per controller, as the other purchasing writes do.
+- Write limits are one shared budget for orders, approvals, cancellations, receipts
+  and stock counts (60 a minute per user, 200 in ten minutes per organization), and
+  receipts have their own, tighter 20 in ten minutes per organization, since one
+  receipt writes a line, a movement and a balance update for every line, none of it
+  deletable. The organization's counters only count requests from someone allowed to
+  write, so a forbidden role can spend only its own allowance.
+- Each controller authorizes the caller before it looks any record up, so a role
+  without access gets the same 403 for an id that exists and one that does not.
+- A title has a state machine (`open` to `cancelled`), and the database guards it: a
+  deferred constraint trigger keeps its installments adding up to its total, what a
+  title and an installment were created with cannot be edited (only the settled
+  amount and the status move), and the app role cannot delete either.
+- The supplier's invoice number is short text: letters, digits, spaces and `. / -`,
+  at most 60 characters and no run of more than 15 digits, so the 44-digit NF-e access
+  key (which embeds the issuer's CNPJ) cannot be stored in the clear. The same invoice
+  number is not refused a second time: whether a duplicate should be, per supplier, is
+  a product decision to make with the settlement slice.
+- The warehouse's state is checked after the idempotency key is claimed, so a retry of
+  a receipt that succeeded replays it even if the warehouse was deactivated since.
+- Capabilities that read purchasing, the ledger and stock value are allow-lists of
+  roles, not "everyone but sales", so a future role gets none of them by default.
 
 ## Consequences
 

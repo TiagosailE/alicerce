@@ -55,7 +55,7 @@ module Identity
     # observes them, ADR 0008), so a salesperson cannot read the cost of the
     # products they sell off a stock list.
     def view_stock_value?(membership)
-      membership.present? && membership.role != "sales"
+      membership.present? && %w[owner admin purchasing finance read_only].include?(membership.role)
     end
 
     # The ledger shows who moved what, why and, in the note, whatever the
@@ -63,7 +63,7 @@ module Identity
     # stock access beyond seeing what is available to sell): sales reads the
     # balances, quantities only.
     def view_stock_movements?(membership)
-      membership.present? && membership.role != "sales"
+      membership.present? && %w[owner admin purchasing finance read_only].include?(membership.role)
     end
 
     def adjust_stock?(membership)
@@ -75,7 +75,7 @@ module Identity
     # ADR 0008's matrix: owner, admin and purchasing write purchase orders and
     # receipts, finance and read_only read them, sales has no access at all.
     def view_purchasing?(membership)
-      membership.present? && membership.role != "sales"
+      membership.present? && %w[owner admin purchasing finance read_only].include?(membership.role)
     end
 
     def manage_purchasing?(membership)

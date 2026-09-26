@@ -91,6 +91,18 @@ RSpec.describe "Purchase orders API" do
       assert_response_schema_confirm(404)
     end
 
+    it "answers a role without access the same 403 for an order that exists and one that does not" do
+      sales = create_membership(organization, role: "sales")
+      order = existing_order
+      sign_in_via_api(email: sales.email, password:)
+
+      get "/api/v1/purchase_orders/#{order.id}"
+      existing = response.status
+      get "/api/v1/purchase_orders/0"
+
+      expect([ existing, response.status ]).to eq([ 403, 403 ])
+    end
+
     it "returns the order with its lines, exact amounts and quantities" do
       user = create_membership(organization, role: "purchasing")
       order = existing_order

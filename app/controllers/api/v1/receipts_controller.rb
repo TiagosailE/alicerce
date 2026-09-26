@@ -13,6 +13,7 @@ module Api
       end
 
       def show
+        authorize(Purchasing::Receipt, :show?)
         receipt = Purchasing::Receipt.includes(:lines, :order, :warehouse, :created_by_user, title: %i[installments receipt]).find(params[:id])
         authorize(receipt)
         render json: { data: Purchasing::ReceiptSerializer.new(receipt, payable_visible: policy(receipt).view_payable?).as_json }

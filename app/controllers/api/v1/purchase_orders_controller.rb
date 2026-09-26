@@ -1,7 +1,7 @@
 module Api
   module V1
     class PurchaseOrdersController < BaseController
-      include PurchasingWriteLimits
+      include LedgerWriteLimits
       before_action :require_authentication!
       before_action :verify_csrf_token!, only: %i[create update]
 
@@ -15,9 +15,8 @@ module Api
       end
 
       def show
-        order = find_order
-        authorize(order)
-        render_order(order)
+        authorize(Purchasing::Order, :show?)
+        render_order(find_order)
       end
 
       def create
@@ -32,8 +31,8 @@ module Api
       end
 
       def update
+        authorize(Purchasing::Order, :update?)
         order = find_order
-        authorize(order)
         result = Purchasing::UpdateOrder.call(
           order:, actor: Current.user, revision: revision_param, supplier: find_supplier,
           lines: params[:lines], note: scalar_param(:note), **term_params
