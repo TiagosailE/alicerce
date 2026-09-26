@@ -181,7 +181,9 @@ CREATE TABLE public.catalog_partners (
     phone character varying,
     active boolean DEFAULT true NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT catalog_partners_customer_or_supplier CHECK ((customer OR supplier)),
+    CONSTRAINT catalog_partners_document_type_valid CHECK (((document_type)::text = ANY ((ARRAY['cpf'::character varying, 'cnpj'::character varying])::text[])))
 );
 
 
@@ -1494,6 +1496,13 @@ CREATE INDEX index_catalog_products_on_organization_id ON public.catalog_product
 
 
 --
+-- Name: index_catalog_products_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_products_on_organization_id_and_id ON public.catalog_products USING btree (organization_id, id);
+
+
+--
 -- Name: index_catalog_products_on_organization_id_and_lower_sku; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1540,6 +1549,13 @@ CREATE INDEX index_catalog_units_on_organization_id ON public.catalog_units USIN
 --
 
 CREATE UNIQUE INDEX index_catalog_units_on_organization_id_and_code ON public.catalog_units USING btree (organization_id, code);
+
+
+--
+-- Name: index_catalog_units_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_catalog_units_on_organization_id_and_id ON public.catalog_units USING btree (organization_id, id);
 
 
 --
@@ -1908,6 +1924,30 @@ ALTER TABLE ONLY public.catalog_products
 
 
 --
+-- Name: catalog_products fk_catalog_products_stock_unit_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_products
+    ADD CONSTRAINT fk_catalog_products_stock_unit_same_organization FOREIGN KEY (organization_id, stock_unit_id) REFERENCES public.catalog_units(organization_id, id);
+
+
+--
+-- Name: catalog_unit_conversions fk_catalog_unit_conversions_product_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_unit_conversions
+    ADD CONSTRAINT fk_catalog_unit_conversions_product_same_organization FOREIGN KEY (organization_id, product_id) REFERENCES public.catalog_products(organization_id, id);
+
+
+--
+-- Name: catalog_unit_conversions fk_catalog_unit_conversions_purchase_unit_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.catalog_unit_conversions
+    ADD CONSTRAINT fk_catalog_unit_conversions_purchase_unit_same_organization FOREIGN KEY (organization_id, purchase_unit_id) REFERENCES public.catalog_units(organization_id, id);
+
+
+--
 -- Name: catalog_products fk_rails_153251c57a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2226,6 +2266,8 @@ CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehous
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926100100'),
+('20260926100000'),
 ('20260921110000'),
 ('20260921100000'),
 ('20260920130000'),
