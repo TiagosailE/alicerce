@@ -52,7 +52,7 @@ function product(overrides: Partial<Product> = {}): Product {
     stock_unit: unit(),
     unit_conversion: {
       purchase_unit: unit({ id: 2, code: "MIL", name: "Milheiro" }),
-      factor: "1000.0",
+      factor: "1000.000000",
     },
     ...overrides,
   };
@@ -130,7 +130,7 @@ describe("ProductDetailScreen", () => {
 
     expect(await screen.findByLabelText("SKU")).toHaveValue("TIJ-001");
     expect(screen.getByLabelText("Nome")).toHaveValue("Tijolo comum");
-    expect(screen.getByLabelText("Fator de conversão")).toHaveValue("1000.0");
+    expect(screen.getByLabelText("Fator de conversão")).toHaveValue("1000");
     expect(screen.getByLabelText("Ativo")).toBeChecked();
   });
 

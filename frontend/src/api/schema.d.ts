@@ -657,7 +657,7 @@ export interface components {
         };
         UnitConversion: {
             purchase_unit: components["schemas"]["Unit"];
-            /** @description Decimal string, 6 places (ADR 0006). Stock quantity = purchase quantity x factor. */
+            /** @description Decimal string, always 6 places (ADR 0006). Stock quantity = purchase quantity x factor. */
             factor: string;
         };
         Product: {
@@ -682,7 +682,7 @@ export interface components {
             category_id?: number | null;
             stock_unit_id: number;
             purchase_unit_id: number;
-            /** @description Decimal string, up to 6 places (ADR 0006). */
+            /** @description Decimal string, greater than zero, below 1000000000, at most 6 places (ADR 0006). More places or a larger value is a validation_failed (too_many_decimals, less_than), never a rounding. */
             factor: string;
         };
         UpdateProductRequest: {
@@ -691,7 +691,7 @@ export interface components {
             category_id?: number | null;
             stock_unit_id: number;
             purchase_unit_id: number;
-            /** @description Decimal string, up to 6 places (ADR 0006). */
+            /** @description Decimal string, greater than zero, below 1000000000, at most 6 places (ADR 0006). More places or a larger value is a validation_failed (too_many_decimals, less_than), never a rounding. */
             factor: string;
             active: boolean;
         };

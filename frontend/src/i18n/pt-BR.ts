@@ -128,7 +128,7 @@ export const ptBR = {
   "products.selectUnitPlaceholder": "Selecione uma unidade",
   "products.factorLabel": "Fator de conversão",
   "products.factorHint":
-    "Quantas unidades de estoque equivalem a 1 unidade de compra. Use ponto para casas decimais (ex.: 1000.5).",
+    "Quantas unidades de estoque equivalem a 1 unidade de compra. Use vírgula para casas decimais (ex.: 2,5); o ponto separa milhares (1.000).",
   "products.createSubmit": "Salvar",
   "products.createSubmitting": "Salvando…",
   "products.createCancel": "Cancelar",
@@ -142,8 +142,10 @@ export const ptBR = {
   "products.fieldErrorStockUnitBlank": "Selecione a unidade de estoque.",
   "products.fieldErrorPurchaseUnitBlank": "Selecione a unidade de compra.",
   "products.fieldErrorFactorBlank": "Informe o fator de conversão.",
-  "products.fieldErrorFactorNotANumber": "Informe um número válido, usando ponto para decimais.",
+  "products.fieldErrorFactorNotANumber": "Informe um número válido, como 1.000 ou 2,5.",
   "products.fieldErrorFactorGreaterThan": "O fator deve ser maior que zero.",
+  "products.fieldErrorFactorLessThan": "O fator deve ser menor que 1.000.000.000.",
+  "products.fieldErrorFactorTooManyDecimals": "Use no máximo 6 casas decimais.",
   "products.fieldErrorGeneric": "Verifique este campo.",
 
   "products.backToList": "Voltar para produtos",

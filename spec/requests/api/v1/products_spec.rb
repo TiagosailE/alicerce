@@ -65,7 +65,7 @@ RSpec.describe "Products API" do
       expect(data["sku"]).to eq("TIJ-001")
       expect(data["stock_unit"]["code"]).to eq("UN")
       expect(data["unit_conversion"]["purchase_unit"]["code"]).to eq("MIL")
-      expect(data["unit_conversion"]["factor"]).to eq("1000.0")
+      expect(data["unit_conversion"]["factor"]).to eq("1000.000000")
       expect(data["category"]).to be_nil
     end
 
@@ -176,7 +176,7 @@ RSpec.describe "Products API" do
       assert_response_schema_confirm(201)
       data = response.parsed_body.fetch("data")
       expect(data["category"]["id"]).to eq(category.id)
-      expect(data["unit_conversion"]["factor"]).to eq("1000.0")
+      expect(data["unit_conversion"]["factor"]).to eq("1000.000000")
     end
 
     it "answers validation_failed for a category_id belonging to another organization" do
@@ -225,6 +225,26 @@ RSpec.describe "Products API" do
       expect(response).to have_http_status(:unprocessable_content)
       assert_response_schema_confirm(422)
       expect(response.parsed_body.dig("error", "code")).to eq("validation_failed")
+    end
+  end
+
+  describe "POST /api/v1/products, factor bounds" do
+    { "1.0000004" => "too_many_decimals", "1000000000" => "less_than" }.each do |factor, kind|
+      it "answers validation_failed with #{kind} for a factor of #{factor}, never a 500" do
+        owner, = create_membership(organization, role: "owner")
+        unidade = create_unit(organization)
+        csrf_token = sign_in_and_csrf(owner)
+
+        post "/api/v1/products",
+          params: { sku: "TIJ-001", name: "Tijolo", stock_unit_id: unidade.id, purchase_unit_id: unidade.id, factor: },
+          as: :json, headers: { "X-CSRF-Token" => csrf_token }
+
+        expect(response).to have_http_status(:unprocessable_content)
+        assert_response_schema_confirm(422)
+        expect(response.parsed_body.dig("error", "details", "fields", "factor")).to include(kind)
+        set_current_tenant(organization)
+        expect(Catalog::Product.count).to eq(0)
+      end
     end
   end
 
@@ -313,7 +333,7 @@ RSpec.describe "Products API" do
       data = response.parsed_body.fetch("data")
       expect(data["name"]).to eq("Tijolo 8 furos")
       expect(data["unit_conversion"]["purchase_unit"]["code"]).to eq("SC")
-      expect(data["unit_conversion"]["factor"]).to eq("50.0")
+      expect(data["unit_conversion"]["factor"]).to eq("50.000000")
     end
   end
 end

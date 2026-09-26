@@ -63,7 +63,7 @@ function product(overrides: Partial<Product> = {}): Product {
     stock_unit: unit(),
     unit_conversion: {
       purchase_unit: unit({ id: 2, code: "MIL", name: "Milheiro" }),
-      factor: "1000.0",
+      factor: "1000.000000",
     },
     ...overrides,
   };
@@ -255,6 +255,92 @@ describe("ProductsScreen", () => {
     });
     expect(screen.queryByLabelText("SKU")).not.toBeInTheDocument();
     expect(await screen.findByRole("status")).toHaveTextContent("Produto criado.");
+  });
+
+  async function fillCreateFormWithFactor(
+    user: ReturnType<typeof userEvent.setup>,
+    factor: string,
+  ) {
+    await screen.findByText("TIJ-001");
+    await user.click(screen.getByRole("button", { name: "Novo produto" }));
+    await user.type(screen.getByLabelText("SKU"), "CIM-001");
+    await user.type(screen.getByLabelText("Nome"), "Cimento");
+    await user.selectOptions(screen.getByLabelText("Unidade de estoque"), "Unidade (UN)");
+    await user.selectOptions(screen.getByLabelText("Unidade de compra"), "Unidade (UN)");
+    const factorInput = screen.getByLabelText("Fator de conversão");
+    await user.clear(factorInput);
+    await user.type(factorInput, factor);
+    await user.click(screen.getByRole("button", { name: "Salvar" }));
+  }
+
+  it.each([
+    ["1.000", "1000"],
+    ["2,5", "2.5"],
+  ])(
+    "sends a factor typed as %s to the API as %s, the way the list displays it",
+    async (typed, sent) => {
+      let requestBody: unknown;
+      const post = vi.fn(async (request: Request) => {
+        requestBody = await jsonBody(request);
+        return jsonResponse({ data: product({ id: 9 }) }, 201);
+      });
+      vi.stubGlobal(
+        "fetch",
+        createFetchMock({
+          ...defaultHandlers,
+          "GET /products": () => listResponse([product()]),
+          "POST /products": post,
+        }),
+      );
+      const user = userEvent.setup();
+      renderScreen();
+
+      await fillCreateFormWithFactor(user, typed);
+
+      expect(post).toHaveBeenCalledTimes(1);
+      expect(requestBody).toMatchObject({ factor: sent });
+    },
+  );
+
+  it("stops a factor it cannot read before calling the API", async () => {
+    const post = vi.fn(() => jsonResponse({ data: product({ id: 9 }) }, 201));
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultHandlers,
+        "GET /products": () => listResponse([product()]),
+        "POST /products": post,
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await fillCreateFormWithFactor(user, "1,2,3");
+
+    expect(post).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Informe um número válido, como 1.000 ou 2,5.",
+    );
+  });
+
+  it("shows the API's decimal-places error on the factor field", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultHandlers,
+        "GET /products": () => listResponse([product()]),
+        "POST /products": () =>
+          errorEnvelope("validation_failed", "invalid", {
+            fields: { factor: ["too_many_decimals"] },
+          }),
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await fillCreateFormWithFactor(user, "1,0000004");
+
+    expect(await screen.findByText("Use no máximo 6 casas decimais.")).toBeInTheDocument();
   });
 
   it("shows a translated error when creation fails validation", async () => {
