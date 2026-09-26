@@ -13,7 +13,7 @@ module DatabaseRoles
   # (this task runs after db:migrate, matching how db:prepare can create the
   # role only once a database exists), so the migration's own revoke and
   # grants are best-effort and this is what actually enforces them.
-  APPEND_ONLY_TABLES = %w[audit_events inventory_movements].freeze
+  APPEND_ONLY_TABLES = %w[audit_events inventory_movements purchasing_receipts purchasing_receipt_lines].freeze
   OWNER_ONLY_FUNCTIONS = {
     "audit_purge" => "bigint, timestamptz",
     "audit_redact" => "bigint, varchar, bigint",

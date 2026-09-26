@@ -70,6 +70,28 @@ RSpec.describe "Stock movements API" do
       expect(response.parsed_body["meta"]["total"]).to eq(2)
     end
 
+    it "points a receipt movement at its receipt, and leaves the link null for a count" do
+      user = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      warehouse = create(:warehouse, organization:)
+      product = orderable_product(organization, sku: "CIM-001")
+      order = approved_order!(organization:, supplier: supplier_for(organization), actor:, lines: [ line_input(product, quantity: "10", unit_price_cents: 1_000) ])
+      receipt = Purchasing::ReceiveGoods.call(
+        organization:, actor:, order:, warehouse:, lines: [ { order_line_id: order.lines.sole.id, quantity: "4" } ],
+        received_on: Time.current.in_time_zone(organization.time_zone).to_date.to_s, idempotency_key: SecureRandom.uuid, request_digest: SecureRandom.hex(16)
+      ).value
+      adjust!(organization, product, warehouse, "3", reason: "loss")
+      sign_in_via_api(email: user.email, password:)
+
+      get "/api/v1/stock_movements"
+
+      assert_response_schema_confirm(200)
+      rows = response.parsed_body["data"]
+      expect(rows.map { |row| row["kind"] }).to eq(%w[adjustment receipt])
+      expect(rows.first["receipt"]).to be_nil
+      expect(rows.last).to include("reason" => nil, "quantity" => "4.000", "value_cents" => 4_000, "receipt" => { "id" => receipt.id, "number" => receipt.number })
+    end
+
     it "filters by product, warehouse and reason" do
       user = create_membership(organization, role: "owner")
       set_current_tenant(organization)

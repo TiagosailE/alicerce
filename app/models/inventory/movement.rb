@@ -19,6 +19,8 @@ module Inventory
     belongs_to :product, class_name: "Catalog::Product"
     belongs_to :warehouse, class_name: "Inventory::Warehouse"
     belongs_to :actor_user, class_name: "Identity::User"
+    # Set on a receipt movement only (a database check states both directions).
+    belongs_to :receipt_line, class_name: "Purchasing::ReceiptLine", optional: true
 
     def readonly? = persisted? || super
   end

@@ -27,6 +27,7 @@ end
 seed_member(canion, email: "joana.lima@canion.example", name: "Joana Lima", role: "owner", password:)
 seed_member(canion, email: "rafael.souza@canion.example", name: "Rafael Souza", role: "sales", password:)
 seed_member(canion, email: "marcia.alves@canion.example", name: "Márcia Alves", role: "finance", password:)
+seed_member(canion, email: "bruno.tavares@canion.example", name: "Bruno Tavares", role: "purchasing", password:)
 
 seed_member(serra, email: "pedro.rocha@serradourada.example", name: "Pedro Rocha", role: "owner", password:)
 
@@ -91,6 +92,37 @@ def seed_stock(organization, actor:, product:, warehouse:, quantity:, unit_cost:
   raise "Seeding stock failed: #{result.error} #{result.details}" unless result.success?
 end
 
+# Purchase orders (slice 4) go through the real commands too, so the amounts, the
+# numbers, the stock and the payables come out as they would in use. An order is
+# found again by its note, so running the seeds twice never adds a second one.
+def seed_order(organization, actor:, supplier:, note:, lines:, installments:, approve: true)
+  existing = Purchasing::Order.find_by(note:)
+  return existing if existing
+
+  created = Purchasing::CreateOrder.call(organization:, actor:, supplier:, lines:, note:, installments:)
+  raise "Seeding an order failed: #{created.error} #{created.details}" unless created.success?
+
+  order = created.value
+  return order unless approve
+
+  approved = Purchasing::ApproveOrder.call(order:, actor:, revision: order.revision)
+  raise "Approving a seeded order failed: #{approved.error} #{approved.details}" unless approved.success?
+
+  order.reload
+end
+
+def seed_receipt(organization, actor:, order:, warehouse:, invoice:)
+  return if Purchasing::Receipt.exists?(order_id: order.id)
+
+  lines = order.lines.map { |line| { order_line_id: line.id, quantity: DecimalString.format(line.quantity, 3) } }
+  result = Purchasing::ReceiveGoods.call(
+    organization:, actor:, order:, warehouse:, lines:, supplier_invoice_number: invoice,
+    received_on: Time.current.in_time_zone(organization.time_zone).to_date.to_s,
+    idempotency_key: "seed-receipt-#{organization.id}-#{order.id}", request_digest: "seed-receipt"
+  )
+  raise "Seeding a receipt failed: #{result.error} #{result.details}" unless result.success?
+end
+
 Current.organization = canion
 unidade = seed_unit(canion, code: "UN", name: "Unidade")
 saco = seed_unit(canion, code: "SC", name: "Saco")
@@ -130,6 +162,22 @@ seed_partner(canion, name: "Cimentos Bahia Distribuidora Ltda", document_type: "
   supplier: true, email: "vendas@cimentosbahia.example", phone: "+55 71 3333-1000")
 seed_partner(canion, name: "Marcos Pereira", document_type: "cpf", document_number: "32993565770",
   customer: true, email: "marcos.pereira@example.com", phone: "+55 71 99999-2000")
+
+# One order waiting to be received (the demo's receiving flow), one already
+# received in full with its payable, and one draft. All three are for the same
+# supplier, at prices in cents per purchase unit: a brick is bought by the thousand.
+bruno = Identity::User.find_by!(email: "bruno.tavares@canion.example")
+cimentos_bahia = Catalog::Partner.find_by!(name: "Cimentos Bahia Distribuidora Ltda")
+seed_order(canion, actor: bruno, supplier: cimentos_bahia, note: "Reposição de cimento e vergalhão", installments: 3,
+  lines: [
+    { product_id: cimento.id, quantity: "200", unit_price_cents: 3_250, discount_bp: 200 },
+    { product_id: vergalhao.id, quantity: "100", unit_price_cents: 5_400, discount_bp: 0 }
+  ])
+tijolo_order = seed_order(canion, actor: bruno, supplier: cimentos_bahia, note: "Tijolo para o pátio", installments: 2,
+  lines: [ { product_id: tijolo.id, quantity: "5", unit_price_cents: 84_990, discount_bp: 0 } ])
+seed_receipt(canion, actor: bruno, order: tijolo_order, warehouse: patio, invoice: "NF 4821")
+seed_order(canion, actor: bruno, supplier: cimentos_bahia, note: "Rascunho de vergalhão", installments: 1, approve: false,
+  lines: [ { product_id: vergalhao.id, quantity: "40", unit_price_cents: 5_450, discount_bp: 0 } ])
 Current.organization = nil
 
 Current.organization = serra

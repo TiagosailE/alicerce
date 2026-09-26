@@ -403,6 +403,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/purchase_orders/{id}/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Receive goods against an approved purchase order
+         * @description Owner, admin and purchasing only (ADR 0017). One receipt for one warehouse: stock enters through the ledger at each line's net cost, the order becomes partially received or received, and a payable is opened for the receipt's total in the order's installments, all in one transaction. A line takes at most what is left of it; more answers 422 over_receipt, with no tolerance. An order that is not approved or partially received answers 409 invalid_transition. A balance already below zero answers 422 negative_balance. The same Idempotency-Key with the same request returns the same receipt; with another request it answers 422 idempotency_key_reused. The payable is in the response only for a role that reads payables.
+         */
+        post: operations["createReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List receipts, newest number first
+         * @description Owner, admin, purchasing, finance and read_only can read; sales has no access (ADR 0017, ADR 0008).
+         */
+        get: operations["listReceipts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/receipts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Show a receipt as a report
+         * @description Per line what it was priced with, its gross, discount and net, and the stock it became. The payable is null for a role that does not read payables.
+         */
+        get: operations["showReceipt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payables": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List payables, newest first, with their installments
+         * @description Owner, admin, finance and read_only can read; purchasing and sales have no access (ADR 0017). Read-only: settlement arrives with the finance slice.
+         */
+        get: operations["listPayables"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/partners": {
         parameters: {
             query?: never;
@@ -895,7 +975,12 @@ export interface components {
         StockMovement: {
             id: number;
             /** @enum {string} */
-            kind: "adjustment";
+            kind: "adjustment" | "receipt";
+            /** @description The receipt a receipt movement came from; null for any other kind. */
+            receipt: {
+                id: number;
+                number: number;
+            } | null;
             reason: components["schemas"]["AdjustmentReason"] | null;
             note: string | null;
             product: components["schemas"]["ProductReference"];
@@ -1017,6 +1102,148 @@ export interface components {
         };
         PurchaseOrderListResponseBody: {
             data: components["schemas"]["PurchaseOrderSummary"][];
+            meta: components["schemas"]["Meta"];
+        };
+        CreateReceiptRequest: {
+            warehouse_id: number;
+            /**
+             * Format: date
+             * @description A day in the organization's time zone: not in the future and not before the day the order was approved.
+             */
+            received_on: string;
+            /** @description Free text typed from the supplier's paper invoice. */
+            supplier_invoice_number?: string;
+            /** @description One entry per order line, at most once each. */
+            lines: components["schemas"]["ReceiptLineInput"][];
+        };
+        ReceiptLineInput: {
+            order_line_id: number;
+            /** @description In purchase units, greater than zero and at most what is left of the line. */
+            quantity: string;
+        };
+        ReceiptSummary: {
+            id: number;
+            number: number;
+            order: {
+                id: number;
+                number: number;
+            };
+            supplier: {
+                id: number;
+                name: string;
+            };
+            warehouse: {
+                id: number;
+                name: string;
+            };
+            /** Format: date */
+            received_on: string;
+            total_cents: number;
+            /** @enum {string} */
+            currency: "BRL";
+            /** Format: date-time */
+            created_at: string;
+        };
+        ReceiptLine: {
+            id: number;
+            order_line_id: number;
+            product: {
+                id: number;
+                sku: string;
+                name: string;
+            };
+            purchase_unit_code: string;
+            stock_unit_code: string;
+            /** @description Stock units per purchase unit, as the order line had it. */
+            factor: string;
+            /** @description Per purchase unit, as the order line had it. */
+            unit_price_cents: number;
+            discount_bp: number;
+            /** @description In purchase units. */
+            quantity: string;
+            /** @description What entered stock, in stock units. */
+            stock_quantity: string;
+            gross_cents: number;
+            discount_cents: number;
+            /** @description Gross minus discount; the value that entered stock. */
+            net_cents: number;
+        };
+        Receipt: {
+            id: number;
+            number: number;
+            /** @enum {string} */
+            status: "posted";
+            order: {
+                id: number;
+                number: number;
+            };
+            supplier: {
+                id: number;
+                name: string;
+            };
+            warehouse: {
+                id: number;
+                name: string;
+            };
+            /** Format: date */
+            received_on: string;
+            supplier_invoice_number: string | null;
+            total_cents: number;
+            /** @enum {string} */
+            currency: "BRL";
+            created_by: {
+                id: number;
+                name: string;
+            };
+            /** Format: date-time */
+            created_at: string;
+            lines: components["schemas"]["ReceiptLine"][];
+            /** @description Null when the receipt is worth nothing or the role does not read payables. */
+            payable: components["schemas"]["Title"] | null;
+        };
+        ReceiptResponseBody: {
+            data: components["schemas"]["Receipt"];
+        };
+        ReceiptListResponseBody: {
+            data: components["schemas"]["ReceiptSummary"][];
+            meta: components["schemas"]["Meta"];
+        };
+        /** @enum {string} */
+        TitleStatus: "open" | "cancelled";
+        Installment: {
+            id: number;
+            number: number;
+            /** Format: date */
+            due_on: string;
+            amount_cents: number;
+            settled_cents: number;
+            open_cents: number;
+        };
+        Title: {
+            id: number;
+            /** @enum {string} */
+            kind: "payable" | "receivable";
+            status: components["schemas"]["TitleStatus"];
+            partner: {
+                id: number;
+                name: string;
+            };
+            receipt: {
+                id: number;
+                number: number;
+            } | null;
+            /** @description The sum of the installments' amounts. */
+            total_cents: number;
+            settled_cents: number;
+            open_cents: number;
+            /** @enum {string} */
+            currency: "BRL";
+            /** Format: date-time */
+            created_at: string;
+            installments: components["schemas"]["Installment"][];
+        };
+        PayableListResponseBody: {
+            data: components["schemas"]["Title"][];
             meta: components["schemas"]["Meta"];
         };
         PurchaseOrderLineInput: {
@@ -1294,6 +1521,33 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["PurchaseOrderListResponseBody"];
+            };
+        };
+        /** @description A receipt with its lines and, for a role that reads payables, the payable it opened. */
+        ReceiptResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ReceiptResponseBody"];
+            };
+        };
+        /** @description A page of receipts. */
+        ReceiptListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ReceiptListResponseBody"];
+            };
+        };
+        /** @description A page of payables. */
+        PayableListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["PayableListResponseBody"];
             };
         };
         /** @description A partner. */
@@ -1957,6 +2211,96 @@ export interface operations {
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
+        };
+    };
+    createReceipt: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                /** @description A client-generated key of 8 to 100 characters (letters, digits and . _ : -), one per user intent (ADR 0005). Repeating a request with the same key and the same body replays its result without a second effect; the same key with another body is a 422 idempotency_key_reused. Only successes are remembered, so a failed attempt can be retried. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateReceiptRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["ReceiptResponse"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    listReceipts: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                order_id?: number;
+                warehouse_id?: number;
+                /** @description Matches the receipt number or the supplier's name. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ReceiptListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    showReceipt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["ReceiptResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listPayables: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                status?: components["schemas"]["TitleStatus"];
+                /** @description Matches the supplier's name. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PayableListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     listPartners: {
