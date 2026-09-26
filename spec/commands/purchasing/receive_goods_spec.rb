@@ -309,14 +309,26 @@ RSpec.describe Purchasing::ReceiveGoods do
       expect(receive_goods(order, [ item(line, "1") ], key: "short").details[:fields]).to eq("idempotency_key" => [ "invalid" ])
     end
 
-    it "an invoice number that is not one: characters outside the usual, or a long run of digits such as an NF-e access key" do
+    it "an invoice number that is not one: characters outside the usual, or too many digits, such as an NF-e access key however it is written" do
       line = order.lines.sole
       access_key = "29260912345678000199550010000012341000012345"
+      # A DANFE prints the key in groups of four; a fullwidth digit is a digit to a reader.
+      grouped = access_key.scan(/\d{4}/).join(" ")
+      dotted = access_key.scan(/\d{4}/).join(".")
+      fullwidth = access_key.gsub(/\d/) { |digit| (0xFF10 + digit.to_i).chr(Encoding::UTF_8) }
+      spread = "#{access_key[0, 8]} NF #{access_key[8, 8]}/#{access_key[16, 8]}"
 
-      [ access_key, "NF #123", "NF\n1", "-1234", "1" * 16 ].each do |invoice|
+      [ access_key, grouped, dotted, fullwidth, spread, "NF #123", "NF\n1", "-1234", "1" * 16, "12345678 12345678" ].each do |invoice|
         expect(receive_goods(order, [ item(line, "1") ], invoice:).details[:fields]).to eq("supplier_invoice_number" => [ "invalid" ]), "expected #{invoice.inspect} to be refused"
       end
       expect(receive_goods(order, [ item(line, "1") ], invoice: "NF 1234/1-A.2")).to be_success
+    end
+
+    it "an invoice number with up to fifteen digits in all, however they are spread" do
+      line = order.lines.sole
+
+      expect(receive_goods(order, [ item(line, "1") ], invoice: "123456789012/003")).to be_success
+      expect(receive_goods(order, [ item(line, "1") ], invoice: "Série B 000123")).to be_success
     end
 
     it "a balance already below zero, which a receipt does not settle yet" do

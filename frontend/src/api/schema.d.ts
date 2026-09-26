@@ -1111,7 +1111,7 @@ export interface components {
              * @description A day in the organization's time zone: not in the future and not before the day the order was approved.
              */
             received_on: string;
-            /** @description Free text typed from the supplier's paper invoice. */
+            /** @description The number typed from the supplier's paper invoice: letters, digits, spaces and . / -, with at most 15 digits in all (invalid otherwise), so the 44 digits of an NF-e access key are refused however they are grouped. */
             supplier_invoice_number?: string;
             /** @description One entry per order line, at most once each. More than 50 is a validation_failed (too_many): an order with more open lines is received in more than one receipt. */
             lines: components["schemas"]["ReceiptLineInput"][];

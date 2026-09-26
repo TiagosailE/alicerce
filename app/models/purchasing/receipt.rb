@@ -13,9 +13,12 @@ module Purchasing
     # is received in more than one receipt.
     MAX_LINES = 50
     SUPPLIER_INVOICE_MAX_LENGTH = 60
-    SUPPLIER_INVOICE_FORMAT = %r{\A[[:alnum:]][[:alnum:] ./-]*\z}
+    # Letters of any alphabet but only ASCII digits, so a digit written in
+    # another script cannot slip past the count below.
+    SUPPLIER_INVOICE_FORMAT = %r{\A[[:alpha:]0-9][[:alpha:]0-9 ./-]*\z}
     # An invoice number is a few digits plus a series; the 44 digits of an NF-e
-    # access key are not one.
+    # access key are not one, however they are grouped or spaced, so the limit is
+    # on every digit of the field together.
     SUPPLIER_INVOICE_MAX_DIGITS = 15
 
     belongs_to :order, class_name: "Purchasing::Order"

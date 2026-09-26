@@ -158,6 +158,30 @@ $$;
 
 
 --
+-- Name: inventory_movement_matches_receipt_line(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.inventory_movement_matches_receipt_line() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  line record;
+BEGIN
+  SELECT stock_quantity, net_cents INTO line FROM purchasing_receipt_lines WHERE id = NEW.receipt_line_id;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  IF (NEW.quantity, NEW.value_cents) IS DISTINCT FROM (line.stock_quantity, line.net_cents) THEN
+    RAISE EXCEPTION 'movement % is % worth % but its receipt line % brought in % worth %',
+      NEW.id, NEW.quantity, NEW.value_cents, NEW.receipt_line_id, line.stock_quantity, line.net_cents;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: inventory_movement_redact_note(bigint, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -227,6 +251,50 @@ $$;
 
 
 --
+-- Name: purchasing_order_line_matches_receipts(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.purchasing_order_line_matches_receipts() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  target_id bigint;
+  counted record;
+  summed record;
+BEGIN
+  IF TG_TABLE_NAME = 'purchasing_order_lines' THEN
+    target_id := NEW.id;
+  ELSE
+    target_id := NEW.order_line_id;
+  END IF;
+
+  SELECT product_id, received_quantity, received_stock_quantity, received_gross_cents, received_discount_cents
+    INTO counted FROM purchasing_order_lines WHERE id = target_id;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  IF TG_TABLE_NAME = 'purchasing_receipt_lines' AND NEW.product_id <> counted.product_id THEN
+    RAISE EXCEPTION 'receipt line % is for product %, but its order line % is for product %',
+      NEW.id, NEW.product_id, target_id, counted.product_id;
+  END IF;
+
+  SELECT COALESCE(SUM(quantity), 0) AS quantity, COALESCE(SUM(stock_quantity), 0) AS stock_quantity,
+         COALESCE(SUM(gross_cents), 0) AS gross_cents, COALESCE(SUM(discount_cents), 0) AS discount_cents
+    INTO summed FROM purchasing_receipt_lines WHERE organization_id = NEW.organization_id AND order_line_id = target_id;
+
+  IF (counted.received_quantity, counted.received_stock_quantity, counted.received_gross_cents, counted.received_discount_cents)
+     IS DISTINCT FROM (summed.quantity, summed.stock_quantity, summed.gross_cents, summed.discount_cents) THEN
+    RAISE EXCEPTION 'order line % records % received (% in stock units, % gross, % discount) but its receipt lines add up to %, %, %, %',
+      target_id, counted.received_quantity, counted.received_stock_quantity, counted.received_gross_cents, counted.received_discount_cents,
+      summed.quantity, summed.stock_quantity, summed.gross_cents, summed.discount_cents;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: purchasing_order_lines_freeze(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -254,6 +322,38 @@ BEGIN
   END IF;
 
   RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+
+--
+-- Name: purchasing_receipt_matches_lines(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.purchasing_receipt_matches_lines() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  target_id bigint;
+  expected bigint;
+  actual numeric;
+BEGIN
+  IF TG_TABLE_NAME = 'purchasing_receipts' THEN
+    target_id := NEW.id;
+  ELSE
+    target_id := NEW.receipt_id;
+  END IF;
+
+  SELECT total_cents INTO expected FROM purchasing_receipts WHERE id = target_id;
+  IF expected IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT COALESCE(SUM(net_cents), 0) INTO actual FROM purchasing_receipt_lines WHERE receipt_id = target_id;
+  IF actual <> expected THEN
+    RAISE EXCEPTION 'the lines of receipt % add up to %, not to its total of %', target_id, actual, expected;
+  END IF;
+  RETURN NULL;
 END;
 $$;
 
@@ -3115,6 +3215,13 @@ CREATE TRIGGER inventory_movements_append_only BEFORE DELETE OR UPDATE ON public
 
 
 --
+-- Name: inventory_movements inventory_movements_match_receipt_line; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER inventory_movements_match_receipt_line AFTER INSERT ON public.inventory_movements DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN ((new.receipt_line_id IS NOT NULL)) EXECUTE FUNCTION public.inventory_movement_matches_receipt_line();
+
+
+--
 -- Name: inventory_movements inventory_movements_no_truncate; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3129,6 +3236,13 @@ CREATE TRIGGER purchasing_order_lines_freeze BEFORE INSERT OR DELETE OR UPDATE O
 
 
 --
+-- Name: purchasing_order_lines purchasing_order_lines_match_receipts; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER purchasing_order_lines_match_receipts AFTER INSERT OR UPDATE OF received_quantity, received_stock_quantity, received_gross_cents, received_discount_cents ON public.purchasing_order_lines DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.purchasing_order_line_matches_receipts();
+
+
+--
 -- Name: purchasing_receipt_lines purchasing_receipt_lines_append_only; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3136,10 +3250,24 @@ CREATE TRIGGER purchasing_receipt_lines_append_only BEFORE DELETE OR UPDATE ON p
 
 
 --
+-- Name: purchasing_receipt_lines purchasing_receipt_lines_match_order_line; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER purchasing_receipt_lines_match_order_line AFTER INSERT ON public.purchasing_receipt_lines DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.purchasing_order_line_matches_receipts();
+
+
+--
 -- Name: purchasing_receipt_lines purchasing_receipt_lines_no_truncate; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER purchasing_receipt_lines_no_truncate BEFORE TRUNCATE ON public.purchasing_receipt_lines FOR EACH STATEMENT EXECUTE FUNCTION public.purchasing_receipts_no_truncate();
+
+
+--
+-- Name: purchasing_receipt_lines purchasing_receipt_lines_total_matches_receipt; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER purchasing_receipt_lines_total_matches_receipt AFTER INSERT ON public.purchasing_receipt_lines DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.purchasing_receipt_matches_lines();
 
 
 --
@@ -3154,6 +3282,13 @@ CREATE TRIGGER purchasing_receipts_append_only BEFORE DELETE OR UPDATE ON public
 --
 
 CREATE TRIGGER purchasing_receipts_no_truncate BEFORE TRUNCATE ON public.purchasing_receipts FOR EACH STATEMENT EXECUTE FUNCTION public.purchasing_receipts_no_truncate();
+
+
+--
+-- Name: purchasing_receipts purchasing_receipts_total_matches_lines; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER purchasing_receipts_total_matches_lines AFTER INSERT ON public.purchasing_receipts DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.purchasing_receipt_matches_lines();
 
 
 --
@@ -3909,6 +4044,7 @@ CREATE POLICY purchasing_receipts_tenant_isolation ON public.purchasing_receipts
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926180000'),
 ('20260926170200'),
 ('20260926170100'),
 ('20260926170000'),

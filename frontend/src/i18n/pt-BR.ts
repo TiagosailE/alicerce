@@ -594,7 +594,7 @@ export const ptBR = {
   "receiving.fieldErrorDateBeforeApproval": "A data não pode ser anterior à aprovação do pedido.",
   "receiving.fieldErrorInvoiceTooLong": "Use no máximo 60 caracteres.",
   "receiving.fieldErrorInvoiceInvalid":
-    "Use só letras, números, espaço e . / - (no máximo 15 dígitos seguidos).",
+    "Use só letras, números, espaço e . / - (no máximo 15 dígitos no total).",
   "receiving.fieldErrorLinesBlank": "Informe a quantidade de ao menos um item.",
   "receiving.fieldErrorLinesTooMany":
     "Um recebimento tem no máximo 50 itens. Receba o restante em outro recebimento.",

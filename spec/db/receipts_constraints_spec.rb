@@ -64,15 +64,45 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
     end
   end
 
-  def insert_movement(kind: "receipt", reason: nil, quantity: 5, receipt_line_id: "NULL", product_id: product.id, warehouse_id: warehouse.id)
+  def insert_movement(kind: "receipt", reason: nil, quantity: 5, value: 500, receipt_line_id: "NULL", product_id: product.id, warehouse_id: warehouse.id)
     reason_sql = reason ? "'#{reason}'" : "NULL"
     connection.transaction(requires_new: true) do
       connection.execute(<<~SQL)
         INSERT INTO inventory_movements (organization_id, product_id, warehouse_id, kind, quantity, value_cents, on_hand_after, value_after_cents,
                                          reason, receipt_line_id, actor_user_id, created_at)
-        VALUES (#{organization.id}, #{product_id}, #{warehouse_id}, '#{kind}', #{quantity}, 500, 5, 500, #{reason_sql}, #{receipt_line_id}, #{actor.id}, now())
+        VALUES (#{organization.id}, #{product_id}, #{warehouse_id}, '#{kind}', #{quantity}, #{value}, 5, 500, #{reason_sql}, #{receipt_line_id}, #{actor.id}, now())
       SQL
     end
+  end
+
+  # Runs the block, then makes the deferred constraints answer now, which is
+  # what the commit of a real transaction does with the rows written in it. The
+  # mode outlives a savepoint that is released, so it goes back to deferred.
+  def at_commit
+    connection.transaction(requires_new: true) do
+      yield
+      connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+      connection.execute("SET CONSTRAINTS ALL DEFERRED")
+    end
+  end
+
+  # Moves what an order line records as received, as ReceiveGoods does after it
+  # writes the receipt line.
+  def bump_received(quantity:, gross:)
+    connection.execute(<<~SQL)
+      UPDATE purchasing_order_lines SET received_quantity = received_quantity + #{quantity}, received_stock_quantity = received_stock_quantity + #{quantity},
+        received_gross_cents = received_gross_cents + #{gross} WHERE id = #{order.lines.sole.id}
+    SQL
+  end
+
+  # A second receipt of one unit against the order, agreeing with everything it
+  # summarizes: its line, the order line's received figures and its own total.
+  def write_consistent_receipt(number:)
+    insert_receipt(order_id: order.id, number:, total: 1_000)
+    receipt_id = connection.select_value("SELECT id FROM purchasing_receipts WHERE number = #{number}").to_i
+    insert_receipt_line(receipt_id:, quantity: 1, stock: 1, gross: 1_000, net: 1_000)
+    bump_received(quantity: 1, gross: 1_000)
+    connection.select_value("SELECT max(id) FROM purchasing_receipt_lines").to_i
   end
 
   describe "purchasing_receipts" do
@@ -103,13 +133,17 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
     end
 
     it "is append-only: the app role holds no UPDATE, DELETE or TRUNCATE on the receipt or its lines, and both keep the second layer" do
+      ties = {
+        "purchasing_receipts" => %w[purchasing_receipts_total_matches_lines],
+        "purchasing_receipt_lines" => %w[purchasing_receipt_lines_match_order_line purchasing_receipt_lines_total_matches_receipt]
+      }
       %w[purchasing_receipts purchasing_receipt_lines].each do |table|
         privileges = %w[SELECT INSERT UPDATE DELETE TRUNCATE].to_h do |privilege|
           [ privilege, connection.select_value("SELECT has_table_privilege(current_user, '#{table}', '#{privilege}')") ]
         end
         expect(privileges).to eq("SELECT" => true, "INSERT" => true, "UPDATE" => false, "DELETE" => false, "TRUNCATE" => false)
         expect(connection.select_values("SELECT tgname FROM pg_trigger WHERE tgrelid = '#{table}'::regclass AND NOT tgisinternal"))
-          .to contain_exactly("#{table}_append_only", "#{table}_no_truncate")
+          .to contain_exactly("#{table}_append_only", "#{table}_no_truncate", *ties.fetch(table))
       end
     end
 
@@ -291,6 +325,66 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
 
     it "points at a receipt line of its own organization only" do
       expect { insert_movement(receipt_line_id: 0) }.to raise_error(ActiveRecord::InvalidForeignKey, /fk_inventory_movements_receipt_line_same_balance/)
+    end
+  end
+
+  describe "what a receipt summarizes, tied to the lines that are append-only, checked at commit" do
+    it "holds for what ReceiveGoods writes, and for a second receipt that agrees with everything it summarizes" do
+      expect { at_commit { } }.not_to raise_error
+      expect { at_commit { write_consistent_receipt(number: 310) } }.not_to raise_error
+    end
+
+    it "keeps an order line's received figures equal to its receipt lines: lowering them to receive again, or raising them with no line, is refused" do
+      line_id = order.lines.sole.id
+
+      expect { at_commit { connection.execute("UPDATE purchasing_order_lines SET received_quantity = 0 WHERE id = #{line_id}") } }
+        .to raise_error(ActiveRecord::StatementInvalid, /records 0\.000 received .* but its receipt lines add up to 4\.000/)
+      expect { at_commit { connection.execute("UPDATE purchasing_order_lines SET received_gross_cents = 0 WHERE id = #{line_id}") } }
+        .to raise_error(ActiveRecord::StatementInvalid, /but its receipt lines add up to 4\.000, 4\.000, 4000, 0/)
+      expect { at_commit { bump_received(quantity: 1, gross: 1_000) } }
+        .to raise_error(ActiveRecord::StatementInvalid, /records 5\.000 received .* but its receipt lines add up to 4\.000/)
+    end
+
+    it "refuses a receipt line the order line does not record as received" do
+      expect do
+        at_commit do
+          insert_receipt(order_id: order.id, number: 311, total: 1_000)
+          insert_receipt_line(receipt_id: connection.select_value("SELECT id FROM purchasing_receipts WHERE number = 311").to_i, quantity: 1, stock: 1, gross: 1_000, net: 1_000)
+        end
+      end.to raise_error(ActiveRecord::StatementInvalid, /records 4\.000 received .* but its receipt lines add up to 5\.000/)
+    end
+
+    it "makes a receipt line be for the product of the order line it consumes" do
+      other_product = orderable_product(organization, sku: "OUT-002")
+
+      expect do
+        at_commit do
+          insert_receipt(order_id: order.id, number: 312, total: 1_000)
+          insert_receipt_line(receipt_id: connection.select_value("SELECT id FROM purchasing_receipts WHERE number = 312").to_i, product_id: other_product.id,
+            quantity: 1, stock: 1, gross: 1_000, net: 1_000)
+          bump_received(quantity: 1, gross: 1_000)
+        end
+      end.to raise_error(ActiveRecord::StatementInvalid, /is for product #{other_product.id}, but its order line \d+ is for product #{product.id}/)
+    end
+
+    it "makes a receipt worth the sum of its lines, with or without any" do
+      expect { at_commit { insert_receipt(order_id: order.id, number: 313, total: 250) } }
+        .to raise_error(ActiveRecord::StatementInvalid, /the lines of receipt \d+ add up to 0, not to its total of 250/)
+      expect do
+        at_commit do
+          insert_receipt(order_id: order.id, number: 314, total: 250)
+          insert_receipt_line(receipt_id: connection.select_value("SELECT id FROM purchasing_receipts WHERE number = 314").to_i, quantity: 1, stock: 1, gross: 1_000, net: 1_000)
+          bump_received(quantity: 1, gross: 1_000)
+        end
+      end.to raise_error(ActiveRecord::StatementInvalid, /the lines of receipt \d+ add up to 1000, not to its total of 250/)
+    end
+
+    it "makes a receipt movement bring in what its line says, in quantity and in value" do
+      expect { at_commit { insert_movement(receipt_line_id: write_consistent_receipt(number: 315), quantity: 5, value: 1_000) } }
+        .to raise_error(ActiveRecord::StatementInvalid, /movement \d+ is 5\.000 worth 1000 but its receipt line \d+ brought in 1\.000 worth 1000/)
+      expect { at_commit { insert_movement(receipt_line_id: write_consistent_receipt(number: 316), quantity: 1, value: 999) } }
+        .to raise_error(ActiveRecord::StatementInvalid, /worth 999 but its receipt line \d+ brought in 1\.000 worth 1000/)
+      expect { at_commit { insert_movement(receipt_line_id: write_consistent_receipt(number: 317), quantity: 1, value: 1_000) } }.not_to raise_error
     end
   end
 end

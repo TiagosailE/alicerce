@@ -263,23 +263,41 @@ RSpec.describe "Receipts API" do
       expect(response).to have_http_status(:created)
     end
 
-    it "has a tighter ceiling for receipts than for the other writes: 20 in ten minutes for the organization" do
+    it "has a tighter ceiling for receipts than for the other writes: 20 that went through in ten minutes for the organization" do
+      purchasing = create_membership(organization, role: "purchasing")
+      order, warehouse = approved_cement_order
+      csrf_token = sign_in_and_csrf(purchasing)
+      limit = Api::V1::PurchaseOrders::ReceiptsController::RECEIPTS_PER_TEN_MINUTES
+
+      statuses = Array.new(limit + 2) do
+        post_receipt(order, receipt_params(order, warehouse, quantity: "1"), csrf_token)
+        response.status
+      end
+
+      expect(statuses.first(limit)).to all(eq(201))
+      expect(statuses.last(2)).to all(eq(429))
+      assert_response_schema_confirm(429)
+    end
+
+    it "does not let receipts that were refused spend the organization's allowance, however many accounts send them" do
       accounts = Array.new(2) { create_membership(organization, role: "purchasing") }
       order, warehouse = approved_cement_order
       bad = receipt_params(order, warehouse, overrides: { lines: [] })
+      limit = Api::V1::PurchaseOrders::ReceiptsController::RECEIPTS_PER_TEN_MINUTES
       statuses = []
 
       accounts.each do |account|
         csrf_token = sign_in_and_csrf(account)
-        11.times do
+        limit.times do
           post_receipt(order, bad, csrf_token)
           statuses << response.status
         end
       end
 
-      expect(statuses.first(20)).to all(eq(422))
-      expect(statuses.last(2)).to all(eq(429))
-      assert_response_schema_confirm(429)
+      # 2 x 20 refused: twice the receipts ceiling, had they counted
+      expect(statuses).to all(eq(422))
+      post_receipt(order, receipt_params(order, warehouse, quantity: "1"), sign_in_and_csrf(accounts.first))
+      expect(response).to have_http_status(:created)
     end
 
     it "answers a role without access the same 403 for an order that exists and one that does not" do

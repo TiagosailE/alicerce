@@ -28,17 +28,18 @@ module Purchasing
     end
 
     # The number printed on the supplier's invoice: short, letters, digits and
-    # the usual separators. A long run of digits is refused because it is not an
+    # the usual separators. Too many digits are refused because it is not an
     # invoice number: the 44 digits of an NF-e access key embed the issuer's CNPJ
     # (a rural producer's CPF, sometimes), which this field must not carry in the
-    # clear (ADR 0012).
+    # clear (ADR 0012). Every digit of the field counts together, since a DANFE
+    # prints the key in groups of four separated by spaces.
     def invoice_error(invoice)
       return if invoice.nil?
       return "invalid" unless invoice.is_a?(String)
       return "too_long" if invoice.length > Purchasing::Receipt::SUPPLIER_INVOICE_MAX_LENGTH
       return "invalid" unless invoice.match?(Purchasing::Receipt::SUPPLIER_INVOICE_FORMAT)
 
-      "invalid" if invoice.scan(/\d+/).any? { |digits| digits.length > Purchasing::Receipt::SUPPLIER_INVOICE_MAX_DIGITS }
+      "invalid" if invoice.count("0-9") > Purchasing::Receipt::SUPPLIER_INVOICE_MAX_DIGITS
     end
 
     def parse_lines(inputs, fields)

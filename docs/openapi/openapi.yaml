@@ -2230,7 +2230,11 @@ components:
         supplier_invoice_number:
           type: string
           maxLength: 60
-          description: Free text typed from the supplier's paper invoice.
+          description: >
+            The number typed from the supplier's paper invoice: letters, digits,
+            spaces and . / -, with at most 15 digits in all (invalid otherwise),
+            so the 44 digits of an NF-e access key are refused however they are
+            grouped.
         lines:
           type: array
           minItems: 1

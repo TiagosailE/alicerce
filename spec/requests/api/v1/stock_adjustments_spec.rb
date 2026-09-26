@@ -341,23 +341,35 @@ RSpec.describe "Stock adjustments API" do
       assert_response_schema_confirm(429) if response.status == 429
     end
 
-    it "answers 429 past the ceiling for the organization as a whole, however many accounts share it" do
-      accounts = Array.new(4) { create_membership(organization, role: "owner") }
+    it "answers 429 once the writes that went through reach the ceiling for the organization as a whole, however many accounts share it" do
+      first, second = Array.new(2) { create_membership(organization, role: "owner") }
       product, warehouse = stock_setup
-      bad = adjustment_params(product, warehouse, counted_quantity: "abc")
-      statuses = []
+      spend_organization_budget(organization, LedgerWriteLimits::ORGANIZATION_WRITES_PER_TEN_MINUTES - 1)
 
-      accounts.each do |account|
-        csrf_token = sign_in_and_csrf(account)
-        55.times do
-          post "/api/v1/stock_adjustments", params: bad, as: :json, headers: headers(csrf_token)
-          statuses << response.status
-        end
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse), as: :json, headers: headers(sign_in_and_csrf(first))
+      expect(response).to have_http_status(:created)
+
+      # The ceiling is reached by the write above, whoever asks next.
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, counted_quantity: "11", expected_on_hand: "10.000", reason: "found"),
+        as: :json, headers: headers(sign_in_and_csrf(second))
+      expect(response).to have_http_status(:too_many_requests)
+      assert_response_schema_confirm(429)
+    end
+
+    it "does not let a request that was refused spend the organization's allowance, only the writes that went through do" do
+      owner = create_membership(organization, role: "owner")
+      product, warehouse = stock_setup
+      spend_organization_budget(organization, LedgerWriteLimits::ORGANIZATION_WRITES_PER_TEN_MINUTES - 1)
+      csrf_token = sign_in_and_csrf(owner)
+
+      statuses = Array.new(5) do
+        post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse, counted_quantity: "abc"), as: :json, headers: headers(csrf_token)
+        response.status
       end
 
-      # 4 x 55 = 220 requests: no account is over its own 60 a minute, the organization is over 200 in ten
-      expect(statuses.first(200)).to all(eq(422))
-      expect(statuses.last).to eq(429)
+      expect(statuses).to all(eq(422))
+      post "/api/v1/stock_adjustments", params: adjustment_params(product, warehouse), as: :json, headers: headers(csrf_token)
+      expect(response).to have_http_status(:created)
     end
   end
 end

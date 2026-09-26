@@ -270,7 +270,12 @@ free-text `note` and `supplier_invoice_number` are filtered from request logs.
   receipts have their own, tighter 20 in ten minutes per organization, since one
   receipt writes a line, a movement and a balance update for every line, none of it
   deletable. The organization's counters only count requests from someone allowed to
-  write, so a forbidden role can spend only its own allowance.
+  write, and only writes that went through (a refused request leaves no permanent
+  row, and counting it would let one looping client lock every colleague out), so a
+  forbidden role can spend only its own allowance. The per-user counter counts every
+  attempt, which is what bounds a loop of invalid requests. The ceilings are chosen
+  for the public demo on free hosting, not measured against a real dock or a
+  counting day, and are to be revisited with real load.
 - Each controller authorizes the caller before it looks any record up, so a role
   without access gets the same 403 for an id that exists and one that does not.
 - A title has a state machine (`open` to `cancelled`), and the database guards it: a
@@ -278,8 +283,9 @@ free-text `note` and `supplier_invoice_number` are filtered from request logs.
   title and an installment were created with cannot be edited (only the settled
   amount and the status move), and the app role cannot delete either.
 - The supplier's invoice number is short text: letters, digits, spaces and `. / -`,
-  at most 60 characters and no run of more than 15 digits, so the 44-digit NF-e access
-  key (which embeds the issuer's CNPJ) cannot be stored in the clear. The same invoice
+  at most 60 characters and at most 15 digits in all, counted across the spaces and
+  separators (a DANFE prints the key in groups of four) and ASCII only, so the 44-digit
+  NF-e access key (which embeds the issuer's CNPJ) cannot be stored in the clear. The same invoice
   number is not refused a second time: whether a duplicate should be, per supplier, is
   a product decision to make with the settlement slice.
 - The warehouse's state is checked after the idempotency key is claimed, so a retry of
@@ -293,7 +299,12 @@ free-text `note` and `supplier_invoice_number` are filtered from request logs.
   receipt's warehouse and a ledger movement can only point at a receipt line of its own
   product and warehouse, both through composite keys; a payable is refused unless it is
   worth what its receipt cost; and an order that is or was approved carries the stamp of
-  its approval, which receiving reads to refuse a date before it.
+  its approval, which receiving reads to refuse a date before it. What summarizes the
+  append-only lines is checked when the transaction commits (deferred constraint
+  triggers): an order line's received figures are the sum of its receipt lines, so
+  lowering one to receive the same goods twice is refused; a receipt is worth the sum
+  of its lines; a receipt movement brings in the quantity and the value of its line;
+  and a receipt line is for the product of the order line it consumes.
 - A line whose cost per stock unit rounds to zero leaves the last cost alone, like a
   free line: a cost of zero would value the next issue at nothing.
 

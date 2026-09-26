@@ -179,10 +179,10 @@ RSpec.describe "Inventory constraints" do
       end
     end
 
-    it "keeps the second layer too: a row trigger for UPDATE and DELETE and a statement trigger for TRUNCATE" do
+    it "keeps the second layer too: a row trigger for UPDATE and DELETE and a statement trigger for TRUNCATE, and the tie of a receipt movement to its line" do
       triggers = connection.select_values("SELECT tgname FROM pg_trigger WHERE tgrelid = 'inventory_movements'::regclass AND NOT tgisinternal")
 
-      expect(triggers).to contain_exactly("inventory_movements_append_only", "inventory_movements_no_truncate")
+      expect(triggers).to contain_exactly("inventory_movements_append_only", "inventory_movements_no_truncate", "inventory_movements_match_receipt_line")
     end
 
     it "is read-only at the model too" do

@@ -7,11 +7,12 @@ module Api
         before_action :require_authentication!
         before_action :verify_csrf_token!
         before_action :require_idempotency_key!
+        RECEIPTS_PER_TEN_MINUTES = 20
+
         # A receipt is the heaviest write here (a line, a movement and a balance
         # update for every line, none of it deletable), so it has a tighter
         # ceiling for the organization on top of the shared ones.
-        rate_limit to: 20, within: 10.minutes, name: "receipts_organization", scope: "receipts",
-          by: -> { Current.organization&.id || request.remote_ip }, if: -> { counts_toward_organization_limit? }
+        organization_budget to: RECEIPTS_PER_TEN_MINUTES, within: 10.minutes, name: "receipts_organization", scope: "receipts"
 
         # POST /purchase_orders/:purchase_order_id/receipts (ADR 0017). The order,
         # the warehouse and the order lines are looked up through the tenant scope,
