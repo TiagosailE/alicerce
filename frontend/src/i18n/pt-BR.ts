@@ -367,7 +367,7 @@ export const ptBR = {
   "shell.navPurchasing": "Compras",
   "purchasing.title": "Pedidos de compra",
   "purchasing.newButton": "Novo pedido",
-  "purchasing.filterStatusLabel": "Situação",
+  "purchasing.filterStatusLabel": "Status",
   "purchasing.filterStatusAll": "Todas",
   "purchasing.searchLabel": "Buscar",
   "purchasing.searchPlaceholder": "Número ou fornecedor",
@@ -375,11 +375,14 @@ export const ptBR = {
   "purchasing.loadError": "Não foi possível carregar os pedidos.",
   "purchasing.emptyNothing":
     "Ainda não há pedidos de compra. Crie o primeiro para começar a comprar de um fornecedor.",
+  "purchasing.emptyNothingViewer": "Ainda não há pedidos de compra.",
+  "purchasing.resultCountOne": "1 pedido encontrado.",
+  "purchasing.resultCountMany": "{count} pedidos encontrados.",
   "purchasing.emptyFiltered": "Nenhum pedido encontrado com esses filtros.",
   "purchasing.clearFilters": "Limpar filtros",
   "purchasing.tableNumber": "Nº",
   "purchasing.tableSupplier": "Fornecedor",
-  "purchasing.tableStatus": "Situação",
+  "purchasing.tableStatus": "Status",
   "purchasing.tableCreated": "Criado em",
   "purchasing.tableTotal": "Total",
   "purchasing.statusDraft": "Rascunho",
@@ -388,24 +391,30 @@ export const ptBR = {
   "purchasing.statusReceived": "Recebido",
   "purchasing.statusCancelled": "Cancelado",
   "purchasing.backToList": "Voltar aos pedidos",
+  "purchasing.backToOrder": "Voltar ao pedido nº {number}",
   "purchasing.detailTitle": "Pedido de compra nº {number}",
   "purchasing.detailLoading": "Carregando o pedido",
   "purchasing.detailLoadError": "Não foi possível carregar o pedido.",
+  "purchasing.detailNotFound": "Este pedido não foi encontrado.",
   "purchasing.fieldSupplier": "Fornecedor",
   "purchasing.fieldDocument": "Documento",
   "purchasing.fieldTerms": "Pagamento",
-  "purchasing.termsValue":
-    "{installments}x, a primeira {first} dias após o recebimento e as demais a cada {interval} dias",
+  "purchasing.termsOne": "1 parcela, {when}",
+  "purchasing.termsMany": "{installments} parcelas, a primeira {when} e as demais {rest}",
+  "purchasing.termsWhenReceipt": "no recebimento",
+  "purchasing.termsWhenOneDay": "1 dia após o recebimento",
+  "purchasing.termsWhenDays": "{days} dias após o recebimento",
+  "purchasing.termsRestSameDay": "no mesmo dia",
+  "purchasing.termsRestEveryOneDay": "a cada 1 dia",
+  "purchasing.termsRestEveryDays": "a cada {days} dias",
   "purchasing.fieldNote": "Observação",
   "purchasing.fieldTotal": "Total do pedido",
-  "purchasing.fieldStatus": "Situação",
   "purchasing.fieldCreatedAt": "Criado em",
   "purchasing.fieldApprovedAt": "Aprovado em",
   "purchasing.fieldCancelledAt": "Cancelado em",
   "purchasing.notInformed": "Não informado",
   "purchasing.linesTitle": "Itens",
   "purchasing.colProduct": "Produto",
-  "purchasing.colUnit": "Un.",
   "purchasing.colQuantity": "Quantidade",
   "purchasing.colReceived": "Recebido",
   "purchasing.colRemaining": "Falta receber",
@@ -420,27 +429,37 @@ export const ptBR = {
   "purchasing.cancelConfirmTitle": "Cancelar o pedido nº {number}?",
   "purchasing.cancelConfirmBody":
     "O que ainda não foi recebido deixa de ser esperado. O que já foi recebido continua no estoque e nas contas a pagar.",
+  "purchasing.cancelConfirmBodyDraft":
+    "O rascunho será cancelado e não poderá mais ser editado nem aprovado.",
   "purchasing.cancelConfirm": "Sim, cancelar pedido",
   "purchasing.cancelBack": "Voltar",
   "purchasing.noteDraft":
     "Rascunho: ainda pode ser editado. Aprove o pedido para poder receber a mercadoria.",
+  "purchasing.noteDraftViewer":
+    "Rascunho: ainda em preparação. Só quem faz compras pode editar e aprovar.",
   "purchasing.noteApproved":
     "Aprovado: os itens e os valores estão travados. Para corrigir um erro, cancele este pedido e crie outro.",
-  "purchasing.noteClosed": "Pedido encerrado: não recebe mais mercadoria.",
+  "purchasing.noteApprovedViewer": "Aprovado: os itens e os valores estão travados.",
+  "purchasing.notePartiallyReceived":
+    "Recebido em parte: os itens e os valores estão travados e o que falta receber ainda é esperado.",
+  "purchasing.noteReceived": "Recebido por completo: não há mais nada a receber.",
+  "purchasing.noteCancelled": "Cancelado: não recebe mais mercadoria.",
   "purchasing.approveSuccess": "Pedido aprovado.",
   "purchasing.cancelSuccess": "Pedido cancelado.",
+  "purchasing.saveSuccess": "Rascunho salvo.",
   "purchasing.approveStaleError":
     "O rascunho foi alterado por outra pessoa depois que você o abriu. Recarregue para ver as condições atuais antes de aprovar.",
   "purchasing.approveConversionError":
     "A unidade de compra ou o fator de um produto mudou depois que o rascunho foi salvo. Edite o rascunho e salve de novo para ver os valores atualizados.",
   "purchasing.approveValidationError":
     "O pedido não pode ser aprovado como está. Confira o fornecedor e os itens.",
-  "purchasing.approveTransitionError": "Este pedido já não é um rascunho. Recarregue a página.",
+  "purchasing.approveTransitionError":
+    "Este pedido já não é um rascunho. A tela agora mostra o estado atual.",
   "purchasing.approveConflictError":
     "O pedido está sendo alterado por outra operação. Tente de novo em instantes.",
   "purchasing.approveGenericError": "Não foi possível aprovar o pedido. Tente novamente.",
   "purchasing.cancelTransitionError":
-    "Este pedido já foi recebido por completo ou cancelado. Recarregue a página.",
+    "Este pedido já foi recebido por completo ou cancelado. A tela agora mostra o estado atual.",
   "purchasing.cancelConflictError":
     "O pedido está sendo alterado por outra operação. Tente de novo em instantes.",
   "purchasing.cancelGenericError": "Não foi possível cancelar o pedido. Tente novamente.",
@@ -477,7 +496,11 @@ export const ptBR = {
   "purchasing.selectPlaceholder": "Selecione",
   "purchasing.submit": "Salvar rascunho",
   "purchasing.submitting": "Salvando",
-  "purchasing.formCancel": "Cancelar",
+  "purchasing.formCancel": "Descartar alterações",
+  "purchasing.formRequiredNote":
+    "Todos os campos são obrigatórios, exceto a observação e o desconto.",
+  "purchasing.formErrorSummaryOne": "1 campo precisa de correção antes de salvar.",
+  "purchasing.formErrorSummaryMany": "{count} campos precisam de correção antes de salvar.",
   "purchasing.fieldErrorGeneric": "Confira este campo.",
   "purchasing.fieldErrorSupplierRequired": "Escolha um fornecedor.",
   "purchasing.fieldErrorSupplierNotFound": "Fornecedor não encontrado.",
@@ -506,7 +529,7 @@ export const ptBR = {
   "purchasing.createGenericError": "Não foi possível salvar o pedido. Tente novamente.",
   "purchasing.createRateLimited": "Muitas tentativas seguidas. Aguarde um minuto e tente de novo.",
   "purchasing.updateStaleError":
-    "Outra pessoa alterou este rascunho depois que você o abriu. Recarregue para ver a versão atual.",
+    "Outra pessoa alterou este rascunho depois que você o abriu, e nada foi salvo. Recarregue para ver a versão atual e refazer a edição; o que você digitou será descartado.",
   "purchasing.updateTransitionError":
     "Este pedido já não é um rascunho, então não pode mais ser editado.",
 } as const;

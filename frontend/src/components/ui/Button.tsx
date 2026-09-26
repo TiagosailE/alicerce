@@ -13,18 +13,17 @@ const variants: Record<Variant, string> = {
   quiet: "border border-transparent bg-transparent hover:bg-row-hover active:bg-row-selected",
 };
 
+/** The look of a button, for a link that navigates: it stays a link (middle
+ * click, copy address, announced as a link) and only looks like the action. */
+export function buttonClass(variant: Variant = "default", className = ""): string {
+  return `${base} ${variants[variant]} ${className}`;
+}
+
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = "default", className = "", type = "button", ...props },
   ref,
 ) {
-  return (
-    <button
-      ref={ref}
-      type={type}
-      className={`${base} ${variants[variant]} ${className}`}
-      {...props}
-    />
-  );
+  return <button ref={ref} type={type} className={buttonClass(variant, className)} {...props} />;
 });

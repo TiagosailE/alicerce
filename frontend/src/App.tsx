@@ -86,10 +86,18 @@ export function App() {
   const canAdjustStock = canManageMasterData;
   // Mirrors Identity::Capabilities.view_stock_movements? (every role but sales).
   const canViewLedger = Boolean(membership && membership.role !== "sales");
-  // Mirrors Identity::Capabilities.view_purchasing? (ADR 0017: every role but
-  // sales reads purchase orders) and manage_purchasing? (owner, admin and
-  // purchasing write them). UX only: the API decides.
-  const canViewPurchasing = canViewLedger;
+  // Mirrors Identity::Capabilities.view_purchasing? (ADR 0017: owner, admin,
+  // purchasing, finance and read_only read purchase orders) and
+  // manage_purchasing? (owner, admin and purchasing write them). UX only: the
+  // API decides. Not derived from the ledger's rule: the two may diverge.
+  const canViewPurchasing = Boolean(
+    membership &&
+    (membership.role === "owner" ||
+      membership.role === "admin" ||
+      membership.role === "purchasing" ||
+      membership.role === "finance" ||
+      membership.role === "read_only"),
+  );
   const canManagePurchasing = canManageMasterData;
 
   return (

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,11 +8,14 @@ import { cellText, nth } from "../../test/dom";
 import { PurchaseOrderDetailScreen } from "./PurchaseOrderDetailScreen";
 import { order, orderLine } from "./testData";
 
-function renderScreen(canManage = true) {
+function renderScreen(
+  canManage = true,
+  entry: string | { pathname: string; state: unknown } = "/compras/9",
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/compras/9"]}>
+      <MemoryRouter initialEntries={[entry]}>
         <Routes>
           <Route
             path="/compras/:id"
@@ -57,7 +60,11 @@ describe("PurchaseOrderDetailScreen", () => {
     expect(screen.getByText("Recebido em parte")).toBeInTheDocument();
     expect(screen.getByText("Cimentos Bahia")).toBeInTheDocument();
     expect(screen.getByText("NXKE3INSKJRI36")).toBeInTheDocument();
-    expect(screen.getByText(/2x, a primeira 30 dias após o recebimento/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /2 parcelas, a primeira 30 dias após o recebimento e as demais a cada 30 dias/,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("Entrega na segunda")).toBeInTheDocument();
     const total = screen.getByText("Total do pedido").nextElementSibling as HTMLElement;
     expect(total.textContent.replace(/\s/g, " ")).toBe("R$ 6.370,00");
@@ -83,7 +90,7 @@ describe("PurchaseOrderDetailScreen", () => {
     renderScreen();
 
     expect(await screen.findByText(/os itens e os valores estão travados/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Editar rascunho" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Editar rascunho" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Aprovar pedido" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancelar pedido" })).toBeInTheDocument();
   });
@@ -98,7 +105,7 @@ describe("PurchaseOrderDetailScreen", () => {
 
     renderScreen();
 
-    expect(await screen.findByText(/Pedido encerrado/)).toBeInTheDocument();
+    expect(await screen.findByText(/Recebido por completo/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancelar pedido" })).not.toBeInTheDocument();
   });
 
@@ -112,7 +119,7 @@ describe("PurchaseOrderDetailScreen", () => {
 
     await screen.findByRole("heading", { name: "Pedido de compra nº 4" });
     expect(screen.queryByRole("button", { name: "Aprovar pedido" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Editar rascunho" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Editar rascunho" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancelar pedido" })).not.toBeInTheDocument();
   });
 
@@ -227,7 +234,7 @@ describe("PurchaseOrderDetailScreen", () => {
     );
 
     expect(await screen.findByText("Pedido cancelado.")).toBeInTheDocument();
-    expect(screen.getByText(/Pedido encerrado/)).toBeInTheDocument();
+    expect(screen.getByText(/Cancelado: não recebe mais mercadoria/)).toBeInTheDocument();
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 
@@ -261,8 +268,143 @@ describe("PurchaseOrderDetailScreen", () => {
     const user = userEvent.setup();
     renderScreen();
 
-    await user.click(await screen.findByRole("button", { name: "Editar rascunho" }));
+    await user.click(await screen.findByRole("link", { name: "Editar rascunho" }));
 
     expect(await screen.findByRole("heading", { name: "Editar" })).toBeInTheDocument();
+  });
+
+  it("says what the terms are in words: one installment, on receipt, in one day", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /purchase_orders/9": () =>
+          jsonResponse({ data: order({ installments: 1, first_due_days: 0, interval_days: 0 }) }),
+      }),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByText("1 parcela, no recebimento")).toBeInTheDocument();
+  });
+
+  it("tells a role that cannot write what a draft is, without telling it to approve", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({ "GET /purchase_orders/9": () => jsonResponse({ data: order() }) }),
+    );
+
+    renderScreen(false);
+
+    expect(
+      await screen.findByText(/Só quem faz compras pode editar e aprovar/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Aprove o pedido/)).not.toBeInTheDocument();
+  });
+
+  it("does not ask the API for an address that is not an order number", async () => {
+    renderScreen(true, "/compras/novo");
+
+    expect(await screen.findByText("Este pedido não foi encontrado.")).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Tentar novamente" })).not.toBeInTheDocument();
+  });
+
+  it("says an order is not found, with no retry, when the API answers 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /purchase_orders/9": () => errorEnvelope("not_found", "x", {}, 404),
+      }),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByText("Este pedido não foi encontrado.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Tentar novamente" })).not.toBeInTheDocument();
+  });
+
+  it("says once that a draft was saved when it opens right after the save", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({ "GET /purchase_orders/9": () => jsonResponse({ data: order() }) }),
+    );
+
+    renderScreen(true, { pathname: "/compras/9", state: { saved: true } });
+
+    const message = await screen.findByText("Rascunho salvo.");
+    expect(message).toHaveFocus();
+  });
+
+  it("moves focus to the message when an approval removes its own button", async () => {
+    let approved = false;
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /purchase_orders/9": () =>
+          jsonResponse({ data: approved ? order({ status: "approved" }) : order() }),
+        "POST /purchase_orders/9/approval": () => {
+          approved = true;
+          return jsonResponse({ data: order({ status: "approved", revision: 1 }) });
+        },
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Aprovar pedido" }));
+
+    expect(await screen.findByText("Pedido aprovado.")).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Aprovar pedido" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes an order the approval found already approved, so its buttons catch up", async () => {
+    let reads = 0;
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /purchase_orders/9": () => {
+          reads += 1;
+          return jsonResponse({ data: reads === 1 ? order() : order({ status: "approved" }) });
+        },
+        "POST /purchase_orders/9/approval": () => errorEnvelope("invalid_transition", "x", {}, 409),
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Aprovar pedido" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "A tela agora mostra o estado atual",
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Aprovar pedido" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByText(/os itens e os valores estão travados/)).toBeInTheDocument();
+  });
+
+  it("puts focus on the safe answer of the cancel dialog, and gives it back on Voltar and on Escape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({ "GET /purchase_orders/9": () => jsonResponse({ data: order() }) }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByRole("button", { name: "Cancelar pedido" }));
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("O rascunho será cancelado e não poderá mais ser editado");
+    expect(dialog).not.toHaveTextContent("O que já foi recebido continua no estoque");
+    expect(within(dialog).getByRole("button", { name: "Voltar" })).toHaveFocus();
+
+    await user.click(within(dialog).getByRole("button", { name: "Voltar" }));
+    expect(screen.getByRole("button", { name: "Cancelar pedido" })).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Cancelar pedido" }));
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancelar pedido" })).toHaveFocus();
   });
 });
