@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFetchMock, errorEnvelope, jsonResponse } from "../../test/api";
 import { cellText, nth } from "../../test/dom";
 import { ReceiptDetailScreen } from "./ReceiptDetailScreen";
-import { receipt, receiptLine, title } from "./testData";
+import { title } from "../finance/testData";
+import { receipt, receiptLine } from "./testData";
 
 function renderScreen(
   canViewPayables = true,
@@ -101,7 +102,7 @@ describe("ReceiptDetailScreen", () => {
     renderScreen(true);
 
     const section = await screen.findByRole("region", { name: "Conta a pagar" });
-    expect(within(section).getByText("Em aberto")).toBeInTheDocument();
+    expect(within(section).getByText("Aberta")).toBeInTheDocument();
     const rows = within(section).getAllByRole("row");
     expect(rows).toHaveLength(3);
     expect(nth(rows, 1)).toHaveTextContent("1");

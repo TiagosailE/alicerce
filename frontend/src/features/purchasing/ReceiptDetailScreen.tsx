@@ -11,15 +11,11 @@ import {
   formatMoneyCents,
   formatQuantity,
 } from "../../lib/format";
-import { type MessageKey, t, tf } from "../../i18n";
+import { t, tf } from "../../i18n";
 import { idFromParam, wasSaved } from "./purchasingLabels";
-import { type Title, useReceipt } from "./receiptsApi";
-
-// A record over the enum, so a status the API adds fails the build until it has a label.
-const TITLE_STATUS_KEYS: Record<Title["status"], MessageKey> = {
-  open: "receipt.titleOpen",
-  cancelled: "receipt.titleCancelled",
-};
+import { type Title } from "../finance/api";
+import { TitleStatusBadge } from "../finance/TitleStatusBadge";
+import { useReceipt } from "./receiptsApi";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -40,7 +36,9 @@ function Payable({ title }: { title: Title }) {
         <Field label={t("receipt.payableTotal")}>
           <span className="num font-medium">{formatMoneyCents(title.total_cents)}</span>
         </Field>
-        <Field label={t("receipt.payableStatus")}>{t(TITLE_STATUS_KEYS[title.status])}</Field>
+        <Field label={t("receipt.payableStatus")}>
+          <TitleStatusBadge status={title.status} />
+        </Field>
       </dl>
       <div className="overflow-x-auto">
         <table className="w-full max-w-xl border-collapse text-sm">

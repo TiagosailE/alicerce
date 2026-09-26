@@ -7,17 +7,15 @@ import {
 } from "@tanstack/react-query";
 import { ApiError, api, csrfHeader, unwrap, unwrapList } from "../../api/client";
 import type { components } from "../../api/schema";
+import { payablesKey } from "../finance/api";
 import { refreshWarehouses, stockKey } from "../inventory/api";
 
 export type Receipt = components["schemas"]["Receipt"];
 export type ReceiptSummary = components["schemas"]["ReceiptSummary"];
 export type ReceiptLine = components["schemas"]["ReceiptLine"];
-export type Title = components["schemas"]["Title"];
-export type Installment = components["schemas"]["Installment"];
 
 const receiptsKey = ["purchasing", "receipts"] as const;
 const orderDetailKey = (orderId: number) => ["purchasing", "orders", "detail", orderId] as const;
-export const payablesKey = ["finance", "payables"] as const;
 
 /** How many lines one receipt takes (Purchasing::Receipt::MAX_LINES): it writes
  * about a dozen rows per line while holding the receipt counter's lock, so a

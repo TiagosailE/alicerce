@@ -1,6 +1,7 @@
 import { useId, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button, buttonClass } from "../../components/ui/Button";
+import { PageGone } from "../../components/ui/PageGone";
 import { PaginationControls } from "../../components/ui/PaginationControls";
 import { SectionError } from "../../components/ui/SectionError";
 import { SectionLoading } from "../../components/ui/SectionLoading";
@@ -43,7 +44,13 @@ export function PurchaseOrdersScreen({ canManage }: { canManage: boolean }) {
     setParams(query, { replace: true });
   }
 
-  const total = orders.data?.meta.total;
+  const list = orders.data;
+  const total = list?.meta.total;
+  const settled = list !== undefined && !orders.isPlaceholderData;
+  // The API applies the offset unchecked: a page past the last one is an empty
+  // list that still reports a total, which is not the same as having none.
+  const pageGone = settled && list.data.length === 0 && list.meta.total > 0;
+  const nothing = settled && list.meta.total === 0;
 
   return (
     <div>
@@ -114,7 +121,14 @@ export function PurchaseOrdersScreen({ canManage }: { canManage: boolean }) {
             }}
           />
         )}
-        {orders.data?.data.length === 0 && !orders.isPlaceholderData && (
+        {pageGone && (
+          <PageGone
+            onFirstPage={() => {
+              change({ page: 1 });
+            }}
+          />
+        )}
+        {nothing && (
           <div className="text-sm text-text-muted">
             <p className="mb-2">
               {filtered
