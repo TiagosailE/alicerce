@@ -5,6 +5,11 @@ import {
   formatSignedQuantity,
   formatUnitCost,
   parseDecimalInput,
+  basisPointsToPercentInput,
+  centsToReaisInput,
+  formatBasisPoints,
+  formatDate,
+  percentToBasisPoints,
   reaisToCents,
   toDecimalInput,
 } from "./format";
@@ -99,5 +104,71 @@ describe("reaisToCents", () => {
     expect(reaisToCents("abc")).toBeNull();
     expect(reaisToCents("")).toBeNull();
     expect(reaisToCents("-1")).toBeNull();
+  });
+});
+
+describe("percentToBasisPoints", () => {
+  it.each([
+    ["2", "200"],
+    ["2,5", "250"],
+    ["0,25", "25"],
+    ["0", "0"],
+    ["100", "10000"],
+    ["12,34 %", "1234"],
+    ["2%", "200"],
+    ["2,50", "250"],
+  ])("moves %s percent to %s basis points in the text", (typed, basisPoints) => {
+    expect(percentToBasisPoints(typed)).toBe(basisPoints);
+  });
+
+  it("rejects more than two places, and what is not a number", () => {
+    expect(percentToBasisPoints("0,001")).toBeNull();
+    expect(percentToBasisPoints("abc")).toBeNull();
+    expect(percentToBasisPoints("")).toBeNull();
+    expect(percentToBasisPoints("-2")).toBeNull();
+  });
+});
+
+describe("formatBasisPoints", () => {
+  it.each([
+    [200, "2%"],
+    [250, "2,5%"],
+    [25, "0,25%"],
+    [0, "0%"],
+    [10000, "100%"],
+  ])("shows %i basis points as %s", (basisPoints, shown) => {
+    expect(formatBasisPoints(basisPoints).replace(/\s/g, "")).toBe(shown);
+  });
+});
+
+describe("formatDate", () => {
+  it("reads the day from its own parts, never through a time zone", () => {
+    expect(formatDate("2026-09-26")).toBe("26/09/2026");
+    expect(formatDate("2026-01-01")).toBe("01/01/2026");
+  });
+});
+
+describe("what the price and discount fields show when an order is edited", () => {
+  it.each([
+    [3250, "32,50"],
+    [5, "0,05"],
+    [0, "0,00"],
+    [84990, "849,90"],
+    [123456789, "1234567,89"],
+  ])("shows %i cents as %s reais and reads back the same", (cents, shown) => {
+    expect(centsToReaisInput(cents)).toBe(shown);
+    expect(reaisToCents(shown)).toBe(String(cents));
+  });
+
+  it.each([
+    [200, "2"],
+    [250, "2,5"],
+    [25, "0,25"],
+    [0, "0"],
+    [10000, "100"],
+    [5, "0,05"],
+  ])("shows %i basis points as %s percent and reads back the same", (basisPoints, shown) => {
+    expect(basisPointsToPercentInput(basisPoints)).toBe(shown);
+    expect(percentToBasisPoints(shown)).toBe(String(basisPoints));
   });
 });
