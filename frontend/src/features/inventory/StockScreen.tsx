@@ -5,7 +5,6 @@ import { SectionError } from "../../components/ui/SectionError";
 import { SectionLoading } from "../../components/ui/SectionLoading";
 import { formatMoneyCents, formatQuantity, formatUnitCost } from "../../lib/format";
 import { t } from "../../i18n";
-import { useProductOptions } from "../catalog/api";
 import { useStockBalances, useWarehouseOptions } from "./api";
 import { StockAdjustmentForm } from "./StockAdjustmentForm";
 import { StockTabs } from "./StockTabs";
@@ -13,7 +12,13 @@ import { WithheldValue } from "./WithheldValue";
 
 /** The stock position, one row per product and warehouse, and the count
  * adjustment form for whoever may record one (ADR 0016). */
-export function StockScreen({ canAdjust }: { canAdjust: boolean }) {
+export function StockScreen({
+  canAdjust,
+  canViewLedger,
+}: {
+  canAdjust: boolean;
+  canViewLedger: boolean;
+}) {
   const [page, setPage] = useState(1);
   const [warehouseId, setWarehouseId] = useState("");
   const [q, setQ] = useState("");
@@ -22,7 +27,6 @@ export function StockScreen({ canAdjust }: { canAdjust: boolean }) {
   const adjustButtonRef = useRef<HTMLButtonElement>(null);
   const isFirstToggle = useRef(true);
   const warehouses = useWarehouseOptions();
-  const products = useProductOptions(adjustOpen);
   const balances = useStockBalances(page, {
     warehouseId: warehouseId ? Number(warehouseId) : undefined,
     q: q || undefined,
@@ -68,7 +72,7 @@ export function StockScreen({ canAdjust }: { canAdjust: boolean }) {
           </Button>
         )}
       </div>
-      <StockTabs />
+      <StockTabs showMovements={canViewLedger} />
 
       {adjustOpen && (
         <div className="mb-5 rounded-md border border-border-subtle bg-surface-raised p-4">
@@ -79,22 +83,18 @@ export function StockScreen({ canAdjust }: { canAdjust: boolean }) {
           >
             {t("stock.adjustTitle")}
           </h2>
-          {(products.isPending || warehouses.isPending) && (
-            <SectionLoading label={t("stock.adjustLoading")} />
-          )}
-          {(products.isError || warehouses.isError) && (
+          {warehouses.isPending && <SectionLoading label={t("stock.adjustLoading")} />}
+          {warehouses.isError && (
             <SectionError
               message={t("stock.adjustLoadError")}
-              error={products.error ?? warehouses.error}
+              error={warehouses.error}
               onRetry={() => {
-                void products.refetch();
                 void warehouses.refetch();
               }}
             />
           )}
-          {products.data && warehouses.data && (
+          {warehouses.data && (
             <StockAdjustmentForm
-              products={products.data.data}
               warehouses={warehouses.data.data}
               onClose={() => {
                 setAdjustOpen(false);

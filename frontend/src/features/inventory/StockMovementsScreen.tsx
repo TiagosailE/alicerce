@@ -12,7 +12,6 @@ import {
 import { t } from "../../i18n";
 import { type AdjustmentReason, useStockMovements, useWarehouseOptions } from "./api";
 import { StockTabs } from "./StockTabs";
-import { WithheldValue } from "./WithheldValue";
 import { ADJUSTMENT_REASONS, REASON_KEYS } from "./stockLabels";
 
 /** The movement ledger, newest first (ADR 0016): every row a signed quantity
@@ -33,7 +32,7 @@ export function StockMovementsScreen() {
   return (
     <div>
       <h1 className="font-display mb-3 text-2xl text-text">{t("stock.title")}</h1>
-      <StockTabs />
+      <StockTabs showMovements />
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div>
@@ -125,7 +124,8 @@ export function StockMovementsScreen() {
                   <th className="py-2 pr-3 text-right font-medium">
                     {t("stock.tableBalanceAfter")}
                   </th>
-                  <th className="py-2 font-medium">{t("stock.tableActor")}</th>
+                  <th className="py-2 pr-3 font-medium">{t("stock.tableActor")}</th>
+                  <th className="py-2 font-medium">{t("stock.tableNote")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,16 +151,16 @@ export function StockMovementsScreen() {
                         {formatSignedQuantity(movement.quantity)} {unit}
                       </td>
                       <td className="num py-2 pr-3 text-right text-text">
-                        {movement.value_cents === null ? (
-                          <WithheldValue />
-                        ) : (
-                          formatMoneyCents(movement.value_cents)
-                        )}
+                        {formatMoneyCents(movement.value_cents)}
                       </td>
                       <td className="num py-2 pr-3 text-right text-text-muted">
                         {formatQuantity(movement.on_hand_after)} {unit}
+                        <span className="block text-xs">
+                          {formatMoneyCents(movement.value_after_cents)}
+                        </span>
                       </td>
-                      <td className="py-2 text-text-muted">{movement.actor.name}</td>
+                      <td className="py-2 pr-3 text-text-muted">{movement.actor.name}</td>
+                      <td className="py-2 text-text-muted">{movement.note ?? ""}</td>
                     </tr>
                   );
                 })}

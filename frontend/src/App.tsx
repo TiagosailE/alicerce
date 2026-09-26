@@ -78,6 +78,8 @@ export function App() {
   // purchasing record adjustments; every role reads the position and the
   // ledger). Same UX-only rule as above: the API decides.
   const canAdjustStock = canManageMasterData;
+  // Mirrors Identity::Capabilities.view_stock_movements? (every role but sales).
+  const canViewLedger = Boolean(membership && membership.role !== "sales");
 
   return (
     <Routes>
@@ -104,8 +106,13 @@ export function App() {
                     }
                   />
                 )}
-                <Route path="/estoque" element={<StockScreen canAdjust={canAdjustStock} />} />
-                <Route path="/estoque/movimentacoes" element={<StockMovementsScreen />} />
+                <Route
+                  path="/estoque"
+                  element={<StockScreen canAdjust={canAdjustStock} canViewLedger={canViewLedger} />}
+                />
+                {canViewLedger && (
+                  <Route path="/estoque/movimentacoes" element={<StockMovementsScreen />} />
+                )}
                 <Route
                   path="/estoque/produtos"
                   element={<ProductsScreen canManage={canManageMasterData} />}

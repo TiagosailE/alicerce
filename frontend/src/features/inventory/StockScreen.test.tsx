@@ -93,12 +93,12 @@ const defaultHandlers = {
   "GET /products": () => listResponse([product()]),
 };
 
-function renderScreen(canAdjust = true) {
+function renderScreen(canAdjust = true, canViewLedger = true) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={["/estoque"]}>
-        <StockScreen canAdjust={canAdjust} />
+        <StockScreen canAdjust={canAdjust} canViewLedger={canViewLedger} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -106,7 +106,7 @@ function renderScreen(canAdjust = true) {
 
 async function openForm(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole("button", { name: "Ajustar estoque" }));
-  await screen.findByLabelText("Produto", { selector: "select" });
+  await screen.findByRole("option", { name: /Cimento CP II/ });
 }
 
 async function fillForm(
@@ -270,6 +270,22 @@ describe("StockScreen", () => {
 
     await screen.findByText("Cimento CP II");
     expect(screen.queryByRole("button", { name: "Ajustar estoque" })).not.toBeInTheDocument();
+  });
+
+  it("hides the movements tab from a role that may not read the ledger", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultHandlers,
+        "GET /stock_balances": () => listResponse([balance()]),
+      }),
+    );
+
+    renderScreen(false, false);
+
+    await screen.findByText("Cimento CP II");
+    expect(screen.getByRole("link", { name: "Saldos" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Movimentações" })).not.toBeInTheDocument();
   });
 
   it("does not fetch the product list until the adjustment panel is opened", async () => {
@@ -706,6 +722,80 @@ describe("StockScreen", () => {
       await user.click(await screen.findByRole("button", { name: "Tentar novamente" }));
 
       expect(await screen.findByText(/Saldo atual: 120,5 UN/)).toBeInTheDocument();
+    });
+
+    it("searches products on the server and says when the list is only the first part of the matches", async () => {
+      const searches: (string | null)[] = [];
+      vi.stubGlobal(
+        "fetch",
+        createFetchMock({
+          ...defaultHandlers,
+          "GET /products": (request) => {
+            searches.push(new URL(request.url).searchParams.get("q"));
+            return jsonResponse({ data: [product()], meta: { page: 1, per_page: 50, total: 120 } });
+          },
+          "GET /stock_balances": () => listResponse([balance()]),
+        }),
+      );
+      const user = userEvent.setup();
+      renderScreen();
+
+      await openForm(user);
+      expect(
+        await screen.findByText("Mostrando 1 de 120 produtos. Refine a busca para ver os demais."),
+      ).toBeInTheDocument();
+
+      await user.type(screen.getByLabelText("Buscar produto para contar"), "cim");
+
+      await waitFor(() => {
+        expect(searches).toContain("cim");
+      });
+    });
+
+    it("keeps the chosen product in the picker when the search then narrows to something else", async () => {
+      vi.stubGlobal(
+        "fetch",
+        createFetchMock({
+          ...defaultHandlers,
+          "GET /products": (request) =>
+            new URL(request.url).searchParams.get("q") === "zzz"
+              ? listResponse([])
+              : listResponse([product()]),
+          "GET /stock_balances": () => listResponse([balance()]),
+        }),
+      );
+      const user = userEvent.setup();
+      renderScreen();
+
+      await openForm(user);
+      await user.selectOptions(screen.getByLabelText("Produto", { selector: "select" }), "7");
+      await user.type(screen.getByLabelText("Buscar produto para contar"), "zzz");
+
+      expect(await screen.findByText("Nenhum produto encontrado.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Produto", { selector: "select" })).toHaveValue("7");
+    });
+
+    it("echoes how the counted quantity is read, and never takes 0.500 for five hundred", async () => {
+      vi.stubGlobal(
+        "fetch",
+        createFetchMock({
+          ...defaultHandlers,
+          "GET /stock_balances": () => listResponse([balance()]),
+        }),
+      );
+      const user = userEvent.setup();
+      renderScreen();
+
+      await openForm(user);
+      await user.selectOptions(screen.getByLabelText("Produto", { selector: "select" }), "7");
+      await user.type(screen.getByLabelText(/Quantidade contada/), "0.500");
+
+      expect(screen.getByText("Contagem lida como 0,5 UN.")).toBeInTheDocument();
+
+      await user.clear(screen.getByLabelText(/Quantidade contada/));
+      await user.type(screen.getByLabelText(/Quantidade contada/), "12.500");
+
+      expect(screen.getByText("Contagem lida como 12.500 UN.")).toBeInTheDocument();
     });
 
     it("says nothing was adjusted when the count matches", async () => {

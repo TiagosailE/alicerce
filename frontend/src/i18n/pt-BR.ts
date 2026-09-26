@@ -336,6 +336,14 @@ export const ptBR = {
   "stock.fieldUnitCostEcho": "Será registrado como {value} por unidade.",
   "stock.fieldErrorUnitCostTooManyDecimals": "Use no máximo 8 casas decimais no custo.",
   "stock.inactiveSuffix": "inativo",
+  "stock.productSearchLabel": "Buscar produto para contar",
+  "stock.productSearchPlaceholder": "Nome ou SKU",
+  "stock.productsTruncated":
+    "Mostrando {shown} de {total} produtos. Refine a busca para ver os demais.",
+  "stock.productsLoadError": "Não foi possível carregar os produtos.",
+  "stock.productsEmpty": "Nenhum produto encontrado.",
+  "stock.fieldCountedEcho": "Contagem lida como {value}.",
+  "stock.tableNote": "Observação",
   "stock.adjustedSummary":
     "Ajuste registrado: {quantity} {unit}{value}. Em estoque: {onHand} {unit}.",
   "stock.adjustedValuePart": ", valor {value}",

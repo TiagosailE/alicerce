@@ -37,7 +37,7 @@ function movement(overrides: Partial<StockMovement> = {}): StockMovement {
     id: 1,
     kind: "adjustment",
     reason: "loss",
-    note: null,
+    note: "2 sacos molhados",
     product: { id: 7, sku: "CIM-001", name: "Cimento CP II", stock_unit: unit },
     warehouse: { id: 1, name: "Loja", active: true },
     quantity: "-3.000",
@@ -103,6 +103,8 @@ describe("StockMovementsScreen", () => {
     expect(cellText(cells, 5)).toBe("-R$ 2,55");
     expect(cells[6]).toHaveTextContent("12 UN");
     expect(cells[7]).toHaveTextContent("Joana Lima");
+    expect(cellText(cells, 8)).toBe("2 sacos molhados");
+    expect(cellText(cells, 6)).toContain("R$ 10,20");
   });
 
   it("shows an empty state", async () => {
