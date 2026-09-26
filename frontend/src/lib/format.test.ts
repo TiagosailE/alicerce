@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatQuantity, parseDecimalInput, toDecimalInput } from "./format";
+import {
+  formatMoneyCents,
+  formatQuantity,
+  formatSignedQuantity,
+  formatUnitCost,
+  parseDecimalInput,
+  reaisToCents,
+  toDecimalInput,
+} from "./format";
 
 describe("parseDecimalInput", () => {
   it.each([
@@ -39,5 +47,54 @@ describe("toDecimalInput", () => {
     ["7", "7"],
   ])("shows %s as %s", (apiValue, expected) => {
     expect(toDecimalInput(apiValue)).toBe(expected);
+  });
+});
+
+describe("money and signed quantities", () => {
+  it("formats integer cents as reais", () => {
+    expect(formatMoneyCents(850).replace(/\s/g, " ")).toBe("R$ 8,50");
+    expect(formatMoneyCents(1_019_880).replace(/\s/g, " ")).toBe("R$ 10.198,80");
+    expect(formatMoneyCents(-255).replace(/\s/g, " ")).toBe("-R$ 2,55");
+  });
+
+  it("formats an amount past what a float divides exactly, and every place of a unit cost", () => {
+    expect(formatMoneyCents(999_999_999_999_999).replace(/\s/g, " ")).toBe(
+      "R$ 9.999.999.999.999,99",
+    );
+    expect(formatUnitCost("84.994567").replace(/\s/g, " ")).toBe("R$ 0,84994567");
+  });
+
+  it("formats a fractional-cent unit cost with the places it has", () => {
+    expect(formatUnitCost("84.990000").replace(/\s/g, " ")).toBe("R$ 0,8499");
+    expect(formatUnitCost("3250.000000").replace(/\s/g, " ")).toBe("R$ 32,50");
+  });
+
+  it("always shows the sign of a movement", () => {
+    expect(formatSignedQuantity("5.000")).toBe("+5");
+    expect(formatSignedQuantity("-3.500")).toBe("-3,5");
+    expect(formatSignedQuantity("0.000")).toBe("0");
+  });
+});
+
+describe("reaisToCents", () => {
+  it.each([
+    ["32,50", "3250"],
+    ["32,5", "3250"],
+    ["32", "3200"],
+    ["0,8499", "84.99"],
+    ["1.234,56", "123456"],
+    ["0", "0"],
+    ["0,001", "0.1"],
+    ["0,05", "5"],
+    ["R$ 32,50", "3250"],
+    ["  r$0,8499", "84.99"],
+  ])("moves %s reais to %s cents in the text", (typed, cents) => {
+    expect(reaisToCents(typed)).toBe(cents);
+  });
+
+  it("rejects what is not a number", () => {
+    expect(reaisToCents("abc")).toBeNull();
+    expect(reaisToCents("")).toBeNull();
+    expect(reaisToCents("-1")).toBeNull();
   });
 });

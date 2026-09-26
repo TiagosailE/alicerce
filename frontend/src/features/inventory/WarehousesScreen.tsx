@@ -7,7 +7,7 @@ import { SectionLoading } from "../../components/ui/SectionLoading";
 import { Spinner } from "../../components/ui/Spinner";
 import { StatusBadge } from "../../components/ui/StatusBadge";
 import { StatusMessage, useActionStatus } from "../../components/ui/StatusMessage";
-import { requestIdSuffix } from "../../lib/errors";
+import { apiFieldErrors, requestIdSuffix } from "../../lib/errors";
 import { type MessageKey, t } from "../../i18n";
 import { type Warehouse, useCreateWarehouse, useUpdateWarehouse, useWarehouses } from "./api";
 
@@ -18,13 +18,6 @@ const FIELD_ERROR_KEYS: Partial<Record<string, MessageKey>> = {
   blank: "warehouses.fieldErrorNameBlank",
   taken: "warehouses.fieldErrorNameTaken",
 };
-
-function apiFieldErrors(error: unknown): Record<string, string[]> {
-  if (!(error instanceof ApiError) || error.code !== "validation_failed") return {};
-  const fields: unknown = error.details.fields;
-  if (!fields || typeof fields !== "object") return {};
-  return fields as Record<string, string[]>;
-}
 
 function nameErrorMessage(error: unknown): string | null {
   const kind = apiFieldErrors(error).name?.[0];

@@ -99,6 +99,19 @@ export function useProducts(page: number, filters: ProductFilters = {}) {
   });
 }
 
+/** Products for a picker, inactive ones included (a discontinued product can
+ * still hold stock to count or write off). A distributor's catalog fits one
+ * page of 100 today; a search box replaces this before it does not. Fetched
+ * only when `enabled`, so a screen that has not opened the picker pays nothing. */
+export function useProductOptions(enabled: boolean) {
+  return useQuery({
+    queryKey: ["catalog", "products", "options"],
+    enabled,
+    queryFn: async () =>
+      unwrapList<Product>(await api.GET("/products", { params: { query: { per_page: 100 } } })),
+  });
+}
+
 export function useProduct(id: number) {
   return useQuery({
     queryKey: productKey(id),

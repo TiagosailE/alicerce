@@ -8,6 +8,8 @@ import { ProductsScreen } from "./features/catalog/ProductsScreen";
 import { HomeScreen } from "./features/home/HomeScreen";
 import { useSession } from "./features/identity/api";
 import { MembersScreen } from "./features/identity/MembersScreen";
+import { StockMovementsScreen } from "./features/inventory/StockMovementsScreen";
+import { StockScreen } from "./features/inventory/StockScreen";
 import { WarehousesScreen } from "./features/inventory/WarehousesScreen";
 import { SignInScreen } from "./features/identity/SignInScreen";
 import { t } from "./i18n";
@@ -72,6 +74,11 @@ export function App() {
       membership.role === "purchasing"),
   );
 
+  // Mirrors Identity::Capabilities.adjust_stock? (ADR 0016: owner, admin and
+  // purchasing record adjustments; every role reads the position and the
+  // ledger). Same UX-only rule as above: the API decides.
+  const canAdjustStock = canManageMasterData;
+
   return (
     <Routes>
       <Route
@@ -97,6 +104,8 @@ export function App() {
                     }
                   />
                 )}
+                <Route path="/estoque" element={<StockScreen canAdjust={canAdjustStock} />} />
+                <Route path="/estoque/movimentacoes" element={<StockMovementsScreen />} />
                 <Route
                   path="/estoque/produtos"
                   element={<ProductsScreen canManage={canManageMasterData} />}

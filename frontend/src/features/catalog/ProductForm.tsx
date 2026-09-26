@@ -2,7 +2,7 @@ import { type SubmitEvent, useId, useState } from "react";
 import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
-import { isStale, requestIdSuffix } from "../../lib/errors";
+import { apiFieldErrors, fieldErrorMessage, isStale, requestIdSuffix } from "../../lib/errors";
 import { parseDecimalInput, toDecimalInput } from "../../lib/format";
 import { type MessageKey, t } from "../../i18n";
 import type { Category, Product, ProductInput, Unit } from "./api";
@@ -30,21 +30,6 @@ const FIELD_ERROR_KEYS: Record<string, Partial<Record<string, MessageKey>>> = {
     too_many_decimals: "products.fieldErrorFactorTooManyDecimals",
   },
 };
-
-function apiFieldErrors(error: unknown): Record<string, string[]> {
-  if (!(error instanceof ApiError) || error.code !== "validation_failed") return {};
-  const fields: unknown = error.details.fields;
-  if (!fields || typeof fields !== "object") return {};
-  return fields as Record<string, string[]>;
-}
-
-function fieldErrorMessage(fieldErrors: Record<string, string[]>, field: string): string | null {
-  const kinds = fieldErrors[field];
-  const kind = kinds?.[0];
-  if (!kind) return null;
-  const key = FIELD_ERROR_KEYS[field]?.[kind];
-  return key ? t(key) : t("products.fieldErrorGeneric");
-}
 
 function productErrorMessage(error: unknown, kind: "create" | "update"): string {
   if (isStale(error)) return t("products.updateStaleError");
@@ -114,14 +99,39 @@ export function ProductForm({
   const factorErrorId = useId();
 
   const fieldErrors = isError ? apiFieldErrors(error) : {};
-  const skuError = fieldErrorMessage(fieldErrors, "sku");
-  const nameError = fieldErrorMessage(fieldErrors, "name");
-  const categoryError = fieldErrorMessage(fieldErrors, "category");
-  const stockUnitError = fieldErrorMessage(fieldErrors, "stock_unit");
-  const purchaseUnitError = fieldErrorMessage(fieldErrors, "purchase_unit");
+  const skuError = fieldErrorMessage(
+    fieldErrors,
+    "sku",
+    FIELD_ERROR_KEYS,
+    "products.fieldErrorGeneric",
+  );
+  const nameError = fieldErrorMessage(
+    fieldErrors,
+    "name",
+    FIELD_ERROR_KEYS,
+    "products.fieldErrorGeneric",
+  );
+  const categoryError = fieldErrorMessage(
+    fieldErrors,
+    "category",
+    FIELD_ERROR_KEYS,
+    "products.fieldErrorGeneric",
+  );
+  const stockUnitError = fieldErrorMessage(
+    fieldErrors,
+    "stock_unit",
+    FIELD_ERROR_KEYS,
+    "products.fieldErrorGeneric",
+  );
+  const purchaseUnitError = fieldErrorMessage(
+    fieldErrors,
+    "purchase_unit",
+    FIELD_ERROR_KEYS,
+    "products.fieldErrorGeneric",
+  );
   const factorError =
     (factorUnreadable ? t("products.fieldErrorFactorNotANumber") : null) ??
-    fieldErrorMessage(fieldErrors, "factor");
+    fieldErrorMessage(fieldErrors, "factor", FIELD_ERROR_KEYS, "products.fieldErrorGeneric");
   // The bottom banner is for whatever a field-level message could not
   // explain (a non-validation failure, or a validation_failed with no
   // field this form recognizes); once every reported field already has
