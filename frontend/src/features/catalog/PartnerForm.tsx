@@ -2,7 +2,7 @@ import { type SubmitEvent, useId, useState } from "react";
 import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
-import { requestIdSuffix } from "../../lib/errors";
+import { isStale, requestIdSuffix } from "../../lib/errors";
 import { type MessageKey, t } from "../../i18n";
 import type { Partner, PartnerInput } from "./api";
 
@@ -54,6 +54,7 @@ function isValidEmail(value: string): boolean {
 }
 
 function partnerErrorMessage(error: unknown, kind: "create" | "update"): string {
+  if (isStale(error)) return t("partners.updateStaleError");
   if (error instanceof ApiError && error.code === "validation_failed") {
     return kind === "create"
       ? t("partners.createValidationError")

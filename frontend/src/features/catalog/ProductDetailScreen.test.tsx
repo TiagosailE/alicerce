@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,8 +13,13 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function errorEnvelope(code: string, message: string, details: Record<string, unknown> = {}) {
-  return jsonResponse({ error: { code, message, details, request_id: "req-1" } }, 422);
+function errorEnvelope(
+  code: string,
+  message: string,
+  details: Record<string, unknown> = {},
+  status = 422,
+) {
+  return jsonResponse({ error: { code, message, details, request_id: "req-1" } }, status);
 }
 
 function listResponse(data: unknown[]) {
@@ -48,6 +53,7 @@ function product(overrides: Partial<Product> = {}): Product {
     sku: "TIJ-001",
     name: "Tijolo comum",
     active: true,
+    revision: 3,
     category: category(),
     stock_unit: unit(),
     unit_conversion: {
@@ -174,7 +180,69 @@ describe("ProductDetailScreen", () => {
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
 
     expect(patch).toHaveBeenCalledTimes(1);
-    expect(requestBody).toMatchObject({ name: "Tijolo 8 furos", active: true });
+    expect(requestBody).toMatchObject({ name: "Tijolo 8 furos", active: true, revision: 3 });
     expect(await screen.findByRole("status")).toHaveTextContent("Produto atualizado.");
+  });
+
+  it("does not let the stock unit be edited, and says why", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultHandlers,
+        "GET /products/42": () => jsonResponse({ data: product() }),
+      }),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByLabelText("Unidade de estoque")).toBeDisabled();
+    expect(screen.getByText(/não pode ser alterada/)).toBeInTheDocument();
+  });
+
+  it("explains a stale save, then reloads the current values and saves with the new revision", async () => {
+    let served = 0;
+    const bodies: Record<string, unknown>[] = [];
+    const patch = vi.fn(async (request: Request) => {
+      bodies.push((await jsonBody(request)) as Record<string, unknown>);
+      return bodies.length === 1
+        ? errorEnvelope("stale", "Stale", { current_revision: 4 }, 409)
+        : jsonResponse({ data: product({ name: "Editado por mim", revision: 5 }) });
+    });
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        ...defaultHandlers,
+        "GET /products/42": () => {
+          served += 1;
+          return jsonResponse({
+            data:
+              served === 1 ? product() : product({ name: "Editado por outra pessoa", revision: 4 }),
+          });
+        },
+        "PATCH /products/42": patch,
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    const nameInput = await screen.findByLabelText("Nome");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Editado por mim");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/alterado por outra pessoa/);
+    await user.click(screen.getByRole("button", { name: "Recarregar" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Nome")).toHaveValue("Editado por outra pessoa");
+    });
+    expect(screen.queryByRole("button", { name: "Recarregar" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => {
+      expect(patch).toHaveBeenCalledTimes(2);
+    });
+    expect(bodies.map((body) => body.revision)).toEqual([3, 4]);
   });
 });

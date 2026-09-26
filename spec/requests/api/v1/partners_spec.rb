@@ -260,7 +260,7 @@ RSpec.describe "Partners API" do
 
       patch "/api/v1/partners/#{other_partner.id}",
         params: { name: "Alterado", document_type: other_partner.document_type, document_number: other_partner.document_number,
-          customer: true, supplier: false, active: true },
+          customer: true, supplier: false, active: true, revision: 0 },
         as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:not_found)
@@ -280,7 +280,7 @@ RSpec.describe "Partners API" do
 
         patch "/api/v1/partners/#{partner.id}",
           params: { name: "Novo nome", document_type: partner.document_type, document_number: partner.document_number,
-            customer: true, supplier: false, active: true },
+            customer: true, supplier: false, active: true, revision: 0 },
           as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
         expect(response).to have_http_status(expected_status)
@@ -296,12 +296,49 @@ RSpec.describe "Partners API" do
 
       patch "/api/v1/partners/#{partner.id}",
         params: { name: partner.name, document_type: partner.document_type, document_number: partner.document_number,
-          customer: true, supplier: false, active: false },
+          customer: true, supplier: false, active: false, revision: 0 },
         as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:ok)
       set_current_tenant(organization)
       expect(partner.reload.active).to be(false)
+    end
+
+    it "answers 409 stale, writing nothing, when the partner changed since it was read" do
+      owner, = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      partner = create(:partner, organization:, name: "Original")
+      csrf_token = sign_in_and_csrf(owner)
+      params = { name: "Primeira edicao", document_type: partner.document_type, document_number: partner.document_number,
+                 customer: true, supplier: false, active: true, revision: 0 }
+
+      patch "/api/v1/partners/#{partner.id}", params:, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+      expect(response.parsed_body.dig("data", "revision")).to eq(1)
+
+      patch "/api/v1/partners/#{partner.id}", params: params.merge(name: "Edicao antiga"), as: :json,
+        headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:conflict)
+      assert_response_schema_confirm(409)
+      expect(response.parsed_body.dig("error", "code")).to eq("stale")
+      set_current_tenant(organization)
+      expect(partner.reload.name).to eq("Primeira edicao")
+    end
+
+    it "answers validation_failed when the revision is missing" do
+      owner, = create_membership(organization, role: "owner")
+      set_current_tenant(organization)
+      partner = create(:partner, organization:)
+      csrf_token = sign_in_and_csrf(owner)
+
+      patch "/api/v1/partners/#{partner.id}",
+        params: { name: "Sem revisao", document_type: partner.document_type, document_number: partner.document_number,
+                  customer: true, supplier: false, active: true },
+        as: :json, headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "details", "fields")).to have_key("revision")
     end
   end
 end

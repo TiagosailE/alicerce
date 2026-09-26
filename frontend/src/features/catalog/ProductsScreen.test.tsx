@@ -59,6 +59,7 @@ function product(overrides: Partial<Product> = {}): Product {
     sku: "TIJ-001",
     name: "Tijolo comum",
     active: true,
+    revision: 3,
     category: category(),
     stock_unit: unit(),
     unit_conversion: {

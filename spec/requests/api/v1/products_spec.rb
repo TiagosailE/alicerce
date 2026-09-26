@@ -267,7 +267,7 @@ RSpec.describe "Products API" do
 
       patch "/api/v1/products/#{other_product.id}",
         params: { sku: other_product.sku, name: "Alterado", stock_unit_id: other_unit.id,
-                  purchase_unit_id: other_unit.id, factor: "1", active: true },
+                  purchase_unit_id: other_unit.id, factor: "1", active: true, revision: 0 },
         as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:not_found)
@@ -289,7 +289,7 @@ RSpec.describe "Products API" do
 
         patch "/api/v1/products/#{product.id}",
           params: { sku: product.sku, name: "Novo nome", stock_unit_id: unidade.id,
-                    purchase_unit_id: milheiro.id, factor: "1000", active: true },
+                    purchase_unit_id: milheiro.id, factor: "1000", active: true, revision: 0 },
           as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
         expect(response).to have_http_status(expected_status)
@@ -306,7 +306,7 @@ RSpec.describe "Products API" do
 
       patch "/api/v1/products/#{product.id}",
         params: { sku: product.sku, name: product.name, category_id: other_category.id,
-                  stock_unit_id: unidade.id, purchase_unit_id: milheiro.id, factor: "1000", active: true },
+                  stock_unit_id: unidade.id, purchase_unit_id: milheiro.id, factor: "1000", active: true, revision: 0 },
         as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:unprocessable_content)
@@ -325,7 +325,7 @@ RSpec.describe "Products API" do
 
       patch "/api/v1/products/#{product.id}",
         params: { sku: product.sku, name: "Tijolo 8 furos", stock_unit_id: unidade.id,
-                  purchase_unit_id: saco.id, factor: "50", active: true },
+                  purchase_unit_id: saco.id, factor: "50", active: true, revision: 0 },
         as: :json, headers: { "X-CSRF-Token" => csrf_token }
 
       expect(response).to have_http_status(:ok)
@@ -334,6 +334,58 @@ RSpec.describe "Products API" do
       expect(data["name"]).to eq("Tijolo 8 furos")
       expect(data["unit_conversion"]["purchase_unit"]["code"]).to eq("SC")
       expect(data["unit_conversion"]["factor"]).to eq("50.000000")
+    end
+
+    it "answers 409 stale, writing nothing, when the product changed since it was read" do
+      owner, = create_membership(organization, role: "owner")
+      product, unidade, milheiro = create_product_with_conversion
+      csrf_token = sign_in_and_csrf(owner)
+      params = { sku: product.sku, name: "Primeira edicao", stock_unit_id: unidade.id,
+                 purchase_unit_id: milheiro.id, factor: "1000", active: true, revision: 0 }
+
+      patch "/api/v1/products/#{product.id}", params:, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("data", "revision")).to eq(1)
+
+      patch "/api/v1/products/#{product.id}", params: params.merge(name: "Edicao antiga"), as: :json,
+        headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:conflict)
+      assert_response_schema_confirm(409)
+      expect(response.parsed_body.dig("error", "code")).to eq("stale")
+      expect(response.parsed_body.dig("error", "details", "current_revision")).to eq(1)
+      set_current_tenant(organization)
+      expect(product.reload.name).to eq("Primeira edicao")
+    end
+
+    it "answers validation_failed when the revision is missing" do
+      owner, = create_membership(organization, role: "owner")
+      product, unidade, milheiro = create_product_with_conversion
+      csrf_token = sign_in_and_csrf(owner)
+
+      patch "/api/v1/products/#{product.id}",
+        params: { sku: product.sku, name: "Sem revisao", stock_unit_id: unidade.id,
+                  purchase_unit_id: milheiro.id, factor: "1000", active: true },
+        as: :json, headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "details", "fields")).to have_key("revision")
+    end
+
+    it "answers validation_failed when the stock unit is changed" do
+      owner, = create_membership(organization, role: "owner")
+      product, _unidade, milheiro = create_product_with_conversion
+      csrf_token = sign_in_and_csrf(owner)
+
+      patch "/api/v1/products/#{product.id}",
+        params: { sku: product.sku, name: product.name, stock_unit_id: milheiro.id,
+                  purchase_unit_id: milheiro.id, factor: "1000", active: true, revision: 0 },
+        as: :json, headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:unprocessable_content)
+      assert_response_schema_confirm(422)
+      expect(response.parsed_body.dig("error", "details", "fields", "stock_unit")).to eq([ "immutable" ])
     end
   end
 end

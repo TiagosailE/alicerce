@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,8 +13,13 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function errorEnvelope(code: string, message: string, details: Record<string, unknown> = {}) {
-  return jsonResponse({ error: { code, message, details, request_id: "req-1" } }, 422);
+function errorEnvelope(
+  code: string,
+  message: string,
+  details: Record<string, unknown> = {},
+  status = 422,
+) {
+  return jsonResponse({ error: { code, message, details, request_id: "req-1" } }, status);
 }
 
 function createFetchMock(
@@ -42,6 +47,7 @@ function partner(overrides: Partial<Partner> = {}): Partner {
     phone: "71999990000",
     personal_data_visible: true,
     active: true,
+    revision: 3,
     ...overrides,
   };
 }
@@ -172,7 +178,52 @@ describe("PartnerDetailScreen", () => {
     await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
 
     expect(patch).toHaveBeenCalledTimes(1);
-    expect(requestBody).toMatchObject({ name: "Marcos P. Pereira", active: true });
+    expect(requestBody).toMatchObject({ name: "Marcos P. Pereira", active: true, revision: 3 });
     expect(await screen.findByRole("status")).toHaveTextContent("Parceiro atualizado.");
+  });
+
+  it("explains a stale save, then reloads the current values and saves with the new revision", async () => {
+    let served = 0;
+    const bodies: Record<string, unknown>[] = [];
+    const patch = vi.fn(async (request: Request) => {
+      bodies.push((await jsonBody(request)) as Record<string, unknown>);
+      return bodies.length === 1
+        ? errorEnvelope("stale", "Stale", { current_revision: 4 }, 409)
+        : jsonResponse({ data: partner({ name: "Editado por mim", revision: 5 }) });
+    });
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /partners/42": () => {
+          served += 1;
+          return jsonResponse({
+            data:
+              served === 1 ? partner() : partner({ name: "Editado por outra pessoa", revision: 4 }),
+          });
+        },
+        "PATCH /partners/42": patch,
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen();
+
+    const nameInput = await screen.findByLabelText("Nome");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Editado por mim");
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/alterado por outra pessoa/);
+    await user.click(screen.getByRole("button", { name: "Recarregar" }));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Nome")).toHaveValue("Editado por outra pessoa");
+    });
+
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
+
+    await waitFor(() => {
+      expect(patch).toHaveBeenCalledTimes(2);
+    });
+    expect(bodies.map((body) => body.revision)).toEqual([3, 4]);
   });
 });

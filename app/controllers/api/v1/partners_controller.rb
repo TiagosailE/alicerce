@@ -37,11 +37,11 @@ module Api
       def update
         partner = find_partner
         authorize(partner)
-        name, document_type, document_number, customer, supplier, active =
-          params.expect(:name, :document_type, :document_number, :customer, :supplier, :active)
+        name, document_type, document_number, customer, supplier, active, revision =
+          params.expect(:name, :document_type, :document_number, :customer, :supplier, :active, :revision)
 
         result = Catalog::UpdatePartner.call(
-          partner:,
+          partner:, revision: Integer(revision, exception: false),
           attributes: {
             name:, document_type:, document_number:, customer:, supplier:, active:,
             email: params[:email].presence, phone: params[:phone].presence

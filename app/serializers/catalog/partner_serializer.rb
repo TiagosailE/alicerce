@@ -20,7 +20,8 @@ module Catalog
         email: (@partner.email if @personal_data_visible),
         phone: (@partner.phone if @personal_data_visible),
         personal_data_visible: @personal_data_visible,
-        active: @partner.active
+        active: @partner.active,
+        revision: @partner.revision
       }
     end
 

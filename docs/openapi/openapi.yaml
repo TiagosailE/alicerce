@@ -376,6 +376,8 @@ paths:
           $ref: "#/components/responses/Error"
         "422":
           $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
 
   /warehouses:
     get:
@@ -568,6 +570,8 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
         "422":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
 
   /invitations:
@@ -1298,12 +1302,18 @@ components:
     Product:
       type: object
       additionalProperties: false
-      required: [ id, sku, name, active, category, stock_unit, unit_conversion ]
+      required: [ id, sku, name, active, revision, category, stock_unit, unit_conversion ]
       properties:
         id: { type: integer }
         sku: { type: string }
         name: { type: string }
         active: { type: boolean }
+        revision:
+          type: integer
+          description: >
+            Counts the successful edits of this record (ADR 0015). Send back
+            the value that was read; if the record changed since, the answer
+            is 409 stale and nothing is written.
         category:
           nullable: true
           allOf: [ { $ref: "#/components/schemas/Category" } ]
@@ -1350,19 +1360,24 @@ components:
     UpdateProductRequest:
       type: object
       additionalProperties: false
-      required: [ sku, name, stock_unit_id, purchase_unit_id, factor, active ]
+      required: [ sku, name, stock_unit_id, purchase_unit_id, factor, active, revision ]
       properties:
         sku: { type: string }
         name: { type: string }
         category_id:
           type: integer
           nullable: true
-        stock_unit_id: { type: integer }
+        stock_unit_id:
+          type: integer
+          description: Must equal the product's current stock unit. A different one is a validation_failed with the kind immutable on stock_unit (ADR 0015).
         purchase_unit_id: { type: integer }
         factor:
           type: string
           description: Decimal string, greater than zero, below 1000000000, at most 6 places (ADR 0006). More places or a larger value is a validation_failed (too_many_decimals, less_than), never a rounding.
         active: { type: boolean }
+        revision:
+          type: integer
+          description: The revision that was read; a newer one on the server answers 409 stale (ADR 0015).
 
     Warehouse:
       type: object
@@ -1433,7 +1448,7 @@ components:
     Partner:
       type: object
       additionalProperties: false
-      required: [ id, name, document_type, document_number, customer, supplier, email, phone, personal_data_visible, active ]
+      required: [ id, name, document_type, document_number, customer, supplier, email, phone, personal_data_visible, active, revision ]
       properties:
         id: { type: integer }
         name: { type: string }
@@ -1462,6 +1477,12 @@ components:
             False when the caller's role may not see this partner's CPF,
             e-mail and phone in full (ADR 0014: read_only).
         active: { type: boolean }
+        revision:
+          type: integer
+          description: >
+            Counts the successful edits of this record (ADR 0015). Send back
+            the value that was read; if the record changed since, the answer
+            is 409 stale and nothing is written.
 
     PartnerResponseBody:
       type: object
@@ -1500,7 +1521,7 @@ components:
     UpdatePartnerRequest:
       type: object
       additionalProperties: false
-      required: [ name, document_type, document_number, customer, supplier, active ]
+      required: [ name, document_type, document_number, customer, supplier, active, revision ]
       properties:
         name: { type: string }
         document_type:
@@ -1512,3 +1533,6 @@ components:
         email: { type: string }
         phone: { type: string }
         active: { type: boolean }
+        revision:
+          type: integer
+          description: The revision that was read; a newer one on the server answers 409 stale (ADR 0015).
