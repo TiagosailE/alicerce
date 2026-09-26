@@ -78,6 +78,11 @@ end
 # derived from the ids, so running the seeds again replays instead of adding
 # stock a second time. unit_cost is in cents per stock unit (ADR 0016).
 def seed_stock(organization, actor:, product:, warehouse:, quantity:, unit_cost:)
+  # The idempotency key alone would not keep this safe to rerun: keys expire
+  # after 24 hours (ADR 0005), and a second run against a balance that has moved
+  # would be refused as stale. A balance with any history is left alone.
+  return if Inventory::Movement.exists?(product_id: product.id, warehouse_id: warehouse.id)
+
   result = Inventory::AdjustStock.call(
     organization:, actor:, product:, warehouse:, counted_quantity: quantity, expected_on_hand: "0", reason: "opening_balance",
     unit_cost_cents: unit_cost, idempotency_key: "seed-#{organization.id}-#{product.id}-#{warehouse.id}",

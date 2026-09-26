@@ -16,6 +16,8 @@ end
 # The schema is loaded as the owner; the examples run as the application role,
 # with production grants and under row level security (ADR 0003).
 ActiveRecord::Base.with_connection { |connection| DatabaseRoles.prepare!(connection) }
+# Kept for the few examples that must act as the owner (spec/support/owner_connection.rb).
+OWNER_DB_CONFIG = ActiveRecord::Base.connection_db_config.configuration_hash.dup.freeze
 ActiveRecord::Base.establish_connection(
   DatabaseRoles.app_connection_config(ActiveRecord::Base.connection_db_config.configuration_hash)
 )

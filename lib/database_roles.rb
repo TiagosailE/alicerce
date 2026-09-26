@@ -17,8 +17,15 @@ module DatabaseRoles
   OWNER_ONLY_FUNCTIONS = {
     "audit_purge" => "bigint, timestamptz",
     "audit_redact" => "bigint, varchar, bigint",
-    "inventory_movement_redact_note" => "bigint, bigint",
     "invitation_organization_id" => "varchar"
+  }.freeze
+
+  # Functions only the owner may execute. A migration revokes PUBLIC and the app
+  # role, but db/structure.sql omits privileges, so a database loaded from it
+  # would keep PostgreSQL's default of EXECUTE for everyone; this is what makes
+  # development and test match production (docs/security.md).
+  OWNER_EXECUTE_ONLY_FUNCTIONS = {
+    "inventory_movement_redact_note" => "bigint, bigint"
   }.freeze
 
   module_function
@@ -48,6 +55,7 @@ module DatabaseRoles
 
     revoke_append_only_privileges!(connection)
     grant_owner_only_function_privileges!(connection)
+    revoke_owner_execute_only_privileges!(connection)
   end
 
   def revoke_append_only_privileges!(connection)
@@ -55,6 +63,15 @@ module DatabaseRoles
       next unless connection.table_exists?(table)
 
       connection.execute("REVOKE UPDATE, DELETE ON #{table} FROM #{APP_ROLE}")
+    end
+  end
+
+  def revoke_owner_execute_only_privileges!(connection)
+    OWNER_EXECUTE_ONLY_FUNCTIONS.each do |name, signature|
+      next unless connection.select_value("SELECT 1 FROM pg_proc WHERE proname = #{connection.quote(name)}")
+
+      connection.execute("REVOKE ALL ON FUNCTION #{name}(#{signature}) FROM PUBLIC")
+      connection.execute("REVOKE ALL ON FUNCTION #{name}(#{signature}) FROM #{APP_ROLE}")
     end
   end
 

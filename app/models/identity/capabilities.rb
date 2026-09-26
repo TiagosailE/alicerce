@@ -58,6 +58,14 @@ module Identity
       membership.present? && membership.role != "sales"
     end
 
+    # The ledger shows who moved what, why and, in the note, whatever the
+    # operator typed, so it is not for sales (ADR 0008's matrix gives sales no
+    # stock access beyond seeing what is available to sell): sales reads the
+    # balances, quantities only.
+    def view_stock_movements?(membership)
+      membership.present? && membership.role != "sales"
+    end
+
     def adjust_stock?(membership)
       return false unless membership
 

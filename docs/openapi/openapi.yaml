@@ -505,7 +505,7 @@ paths:
     get:
       operationId: listStockMovements
       summary: List the movement ledger, newest first
-      description: Every role can read (ADR 0016).
+      description: Every role but sales can read (ADR 0016); sales sees balances only.
       parameters:
         - name: page
           in: query
@@ -1637,17 +1637,14 @@ components:
           description: Signed, and a negative quantity takes stock out.
         value_cents:
           type: integer
-          nullable: true
-          description: Signed like quantity. Null for a role that may not see values.
+          description: Signed like quantity.
         currency:
           type: string
           enum: [ BRL ]
         on_hand_after:
           type: string
           pattern: '^-?[0-9]{1,12}\.[0-9]{3}$'
-        value_after_cents:
-          type: integer
-          nullable: true
+        value_after_cents: { type: integer }
         actor:
           type: object
           additionalProperties: false

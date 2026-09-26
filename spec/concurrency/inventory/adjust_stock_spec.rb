@@ -134,4 +134,31 @@ RSpec.describe "concurrent stock adjustments (ADR 0004, ADR 0005, ADR 0016)" do
     expect(ledger.sum(&:value_cents)).to eq(balance.value_cents)
     expect([ BigDecimal("30"), BigDecimal("70") ]).to include(balance.on_hand)
   end
+
+  # The threads above overlap only when the scheduler happens to line them up,
+  # so on an unlucky run a missing lock would still pass. This one forces it:
+  # the first holds the balance's lock for a known time, and the second, which
+  # starts only once that lock is held, must not get through before it ends.
+  it "makes a second counter wait for the first to be done with the balance" do
+    expect(adjust("100", reason: "opening_balance", unit_cost: "10")).to be_success
+    locked = Queue.new
+    hold_for = 0.5
+
+    holder = Thread.new do
+      set_current_tenant(@organization)
+      ApplicationRecord.transaction do
+        Inventory::Balance.lock_for(organization: @organization, pairs: [ [ @product.id, @warehouse.id ] ])
+        locked << true
+        sleep hold_for
+      end
+    end
+    locked.pop
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    result = adjust("90", expected: "100.000", reason: "loss")
+    waited = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+    holder.join
+
+    expect(result).to be_success
+    expect(waited).to be >= hold_for * 0.6
+  end
 end

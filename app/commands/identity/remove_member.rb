@@ -21,7 +21,7 @@ module Identity
 
       ApplicationRecord.transaction do
         ApplicationRecord.lease_connection.execute("SET LOCAL lock_timeout = '3s'")
-        organization = Identity::Organization.lock.find(@membership.organization_id)
+        organization = Identity::Organization.lock("FOR NO KEY UPDATE").find(@membership.organization_id)
         return Result.failure(:last_owner) if last_owner?(organization)
 
         role = @membership.role

@@ -2722,6 +2722,7 @@ CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehous
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926130000'),
 ('20260926120400'),
 ('20260926120300'),
 ('20260926120200'),
