@@ -3,6 +3,7 @@ import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
 import { requestIdSuffix } from "../../lib/errors";
+import { parseDecimalInput, toDecimalInput } from "../../lib/format";
 import { type MessageKey, t } from "../../i18n";
 import type { Category, Product, ProductInput, Unit } from "./api";
 
@@ -22,6 +23,8 @@ const FIELD_ERROR_KEYS: Record<string, Partial<Record<string, MessageKey>>> = {
     blank: "products.fieldErrorFactorBlank",
     not_a_number: "products.fieldErrorFactorNotANumber",
     greater_than: "products.fieldErrorFactorGreaterThan",
+    less_than: "products.fieldErrorFactorLessThan",
+    too_many_decimals: "products.fieldErrorFactorTooManyDecimals",
   },
 };
 
@@ -88,7 +91,8 @@ export function ProductForm({
   // existing product's stored unit has no such ambiguity.
   const [stockUnitId, setStockUnitId] = useState(initial?.stockUnitId?.toString() ?? "");
   const [purchaseUnitId, setPurchaseUnitId] = useState(initial?.purchaseUnitId?.toString() ?? "");
-  const [factor, setFactor] = useState(initial?.factor ?? "1");
+  const [factor, setFactor] = useState(initial?.factor ? toDecimalInput(initial.factor) : "1");
+  const [factorUnreadable, setFactorUnreadable] = useState(false);
   const [active, setActive] = useState(initial?.active ?? true);
   const skuId = useId();
   const nameId = useId();
@@ -111,7 +115,9 @@ export function ProductForm({
   const categoryError = fieldErrorMessage(fieldErrors, "category");
   const stockUnitError = fieldErrorMessage(fieldErrors, "stock_unit");
   const purchaseUnitError = fieldErrorMessage(fieldErrors, "purchase_unit");
-  const factorError = fieldErrorMessage(fieldErrors, "factor");
+  const factorError =
+    (factorUnreadable ? t("products.fieldErrorFactorNotANumber") : null) ??
+    fieldErrorMessage(fieldErrors, "factor");
   // The bottom banner is for whatever a field-level message could not
   // explain (a non-validation failure, or a validation_failed with no
   // field this form recognizes); once every reported field already has
@@ -121,15 +127,22 @@ export function ProductForm({
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Decimal strings travel with a period (ADR 0006) but a pt-BR user types
+    // a comma and reads the list's "1.000" as one thousand; the translation
+    // is a text rule, not arithmetic, and anything it cannot read stops here
+    // instead of being guessed at.
+    const parsedFactor = parseDecimalInput(factor);
+    if (parsedFactor === null) {
+      setFactorUnreadable(true);
+      return;
+    }
     onSubmit({
       sku,
       name,
       categoryId: categoryId ? Number(categoryId) : null,
       stockUnitId: Number(stockUnitId),
       purchaseUnitId: Number(purchaseUnitId),
-      // Decimal strings travel with a period (ADR 0006); pt-BR users type a
-      // comma by habit, so this is a text substitution, not arithmetic.
-      factor: factor.trim().replace(",", "."),
+      factor: parsedFactor,
       active,
     });
   }
@@ -291,6 +304,7 @@ export function ProductForm({
             value={factor}
             onChange={(event) => {
               setFactor(event.target.value);
+              setFactorUnreadable(false);
             }}
             aria-describedby={
               factorError ? `${factorErrorId} ${factorId}-hint` : `${factorId}-hint`
