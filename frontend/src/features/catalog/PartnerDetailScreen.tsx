@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Button } from "../../components/ui/Button";
 import { SectionError } from "../../components/ui/SectionError";
 import { SectionLoading } from "../../components/ui/SectionLoading";
 import { StatusMessage, useActionStatus } from "../../components/ui/StatusMessage";
 import { t } from "../../i18n";
+import { isStale } from "../../lib/errors";
 import { usePartner, useUpdatePartner } from "./api";
 import { PartnerForm, partnerKindLabel, partnerToInitial } from "./PartnerForm";
 
@@ -21,6 +24,10 @@ export function PartnerDetailScreen({ canManage }: { canManage: boolean }) {
   const partner = usePartner(partnerId);
   const updatePartner = useUpdatePartner();
   const status = useActionStatus();
+  // Remounts the form with the reloaded values after a stale save, since its
+  // fields keep their own state.
+  const [formKey, setFormKey] = useState(0);
+  const current = partner.data;
 
   return (
     <div>
@@ -41,32 +48,50 @@ export function PartnerDetailScreen({ canManage }: { canManage: boolean }) {
         />
       )}
 
-      {partner.data && (
+      {current && (
         <div>
           <h1 className="font-display mb-5 text-2xl text-text">{partner.data.name}</h1>
           <StatusMessage status={status.status} />
 
           {canManage ? (
-            <PartnerForm
-              initial={partnerToInitial(partner.data)}
-              submitLabel={t("partners.updateSubmit")}
-              submittingLabel={t("partners.updateSubmitting")}
-              errorKind="update"
-              isPending={updatePartner.isPending}
-              isError={updatePartner.isError}
-              error={updatePartner.error}
-              showActiveToggle
-              onSubmit={(input) => {
-                updatePartner.mutate(
-                  { id: partnerId, ...input },
-                  {
-                    onSuccess: () => {
-                      status.succeed(t("partners.updateSuccess"));
+            <>
+              <PartnerForm
+                key={formKey}
+                initial={partnerToInitial(partner.data)}
+                submitLabel={t("partners.updateSubmit")}
+                submittingLabel={t("partners.updateSubmitting")}
+                errorKind="update"
+                isPending={updatePartner.isPending}
+                isError={updatePartner.isError}
+                error={updatePartner.error}
+                showActiveToggle
+                onSubmit={(input) => {
+                  updatePartner.mutate(
+                    { id: partnerId, revision: current.revision, ...input },
+                    {
+                      onSuccess: () => {
+                        status.succeed(t("partners.updateSuccess"));
+                      },
                     },
-                  },
-                );
-              }}
-            />
+                  );
+                }}
+              />
+              {isStale(updatePartner.error) && (
+                <Button
+                  type="button"
+                  variant="default"
+                  className="mt-3"
+                  onClick={() => {
+                    void partner.refetch().then(() => {
+                      updatePartner.reset();
+                      setFormKey((key) => key + 1);
+                    });
+                  }}
+                >
+                  {t("common.reload")}
+                </Button>
+              )}
+            </>
           ) : (
             <dl className="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
               <ReadOnlyField

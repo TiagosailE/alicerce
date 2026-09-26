@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Button } from "../../components/ui/Button";
 import { SectionError } from "../../components/ui/SectionError";
 import { SectionLoading } from "../../components/ui/SectionLoading";
 import { StatusMessage, useActionStatus } from "../../components/ui/StatusMessage";
+import { isStale } from "../../lib/errors";
 import { formatQuantity } from "../../lib/format";
 import { t } from "../../i18n";
 import { useCategories, useProduct, useUnits, useUpdateProduct } from "./api";
@@ -24,6 +27,10 @@ export function ProductDetailScreen({ canManage }: { canManage: boolean }) {
   const categories = useCategories();
   const updateProduct = useUpdateProduct();
   const status = useActionStatus();
+  // Remounts the form with the reloaded values after a stale save: its fields
+  // keep their own state, so refetching alone would leave the old input in.
+  const [formKey, setFormKey] = useState(0);
+  const current = product.data;
 
   return (
     <div>
@@ -47,7 +54,7 @@ export function ProductDetailScreen({ canManage }: { canManage: boolean }) {
         />
       )}
 
-      {product.data && (
+      {current && (
         <div>
           <h1 className="font-display mb-5 text-2xl text-text">{product.data.name}</h1>
           <StatusMessage status={status.status} />
@@ -66,28 +73,46 @@ export function ProductDetailScreen({ canManage }: { canManage: boolean }) {
             />
           )}
           {canManage && units.data && categories.data ? (
-            <ProductForm
-              units={units.data.data}
-              categories={categories.data.data}
-              initial={productToInitial(product.data)}
-              submitLabel={t("products.updateSubmit")}
-              submittingLabel={t("products.updateSubmitting")}
-              errorKind="update"
-              isPending={updateProduct.isPending}
-              isError={updateProduct.isError}
-              error={updateProduct.error}
-              showActiveToggle
-              onSubmit={(input) => {
-                updateProduct.mutate(
-                  { id: productId, ...input },
-                  {
-                    onSuccess: () => {
-                      status.succeed(t("products.updateSuccess"));
+            <>
+              <ProductForm
+                key={formKey}
+                units={units.data.data}
+                categories={categories.data.data}
+                initial={productToInitial(product.data)}
+                submitLabel={t("products.updateSubmit")}
+                submittingLabel={t("products.updateSubmitting")}
+                errorKind="update"
+                isPending={updateProduct.isPending}
+                isError={updateProduct.isError}
+                error={updateProduct.error}
+                showActiveToggle
+                onSubmit={(input) => {
+                  updateProduct.mutate(
+                    { id: productId, revision: current.revision, ...input },
+                    {
+                      onSuccess: () => {
+                        status.succeed(t("products.updateSuccess"));
+                      },
                     },
-                  },
-                );
-              }}
-            />
+                  );
+                }}
+              />
+              {isStale(updateProduct.error) && (
+                <Button
+                  type="button"
+                  variant="default"
+                  className="mt-3"
+                  onClick={() => {
+                    void product.refetch().then(() => {
+                      updateProduct.reset();
+                      setFormKey((key) => key + 1);
+                    });
+                  }}
+                >
+                  {t("common.reload")}
+                </Button>
+              )}
+            </>
           ) : !canManage ? (
             <dl className="grid max-w-2xl grid-cols-1 gap-4 sm:grid-cols-2">
               <ReadOnlyField label={t("products.skuLabel")} value={product.data.sku} />

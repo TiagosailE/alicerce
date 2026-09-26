@@ -127,11 +127,16 @@ export function useUpdateProduct() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, active, ...input }: ProductInput & { id: number; active: boolean }) =>
+    mutationFn: async ({
+      id,
+      active,
+      revision,
+      ...input
+    }: ProductInput & { id: number; active: boolean; revision: number }) =>
       unwrap(
         await api.PATCH("/products/{id}", {
           params: { path: { id }, header: csrfHeader() },
-          body: { ...requestBody(input), active },
+          body: { ...requestBody(input), active, revision },
         }),
       ),
     onSuccess: (product: Product) => {
@@ -202,11 +207,16 @@ export function useUpdatePartner() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, active, ...input }: PartnerInput & { id: number; active: boolean }) =>
+    mutationFn: async ({
+      id,
+      active,
+      revision,
+      ...input
+    }: PartnerInput & { id: number; active: boolean; revision: number }) =>
       unwrap(
         await api.PATCH("/partners/{id}", {
           params: { path: { id }, header: csrfHeader() },
-          body: { ...partnerRequestBody(input), active },
+          body: { ...partnerRequestBody(input), active, revision },
         }),
       ),
     onSuccess: (partner: Partner) => {

@@ -85,9 +85,10 @@ Non-negotiable. Each gets a dedicated test in the slice that implements it; the 
 
 - Routes under `/api/v1`; state changes are sub-resources (`POST /api/v1/sales_orders/:id/approval`), not a writable `status`.
 - Success is `{ "data": ... }`, lists add `meta` (`page`, `per_page`, `total`). Errors are `{ "error": { "code", "message", "details", "request_id" } }`.
-- 401 unauthenticated, 403 a visible record the policy denies, 404 missing or another organization's record, 409 invalid transition or `conflict_retry`, 422 validation and domain failures, 429 rate limited.
+- 401 unauthenticated, 403 a visible record the policy denies, 404 missing or another organization's record, 409 invalid transition, `conflict_retry` or `stale` (an edit based on an older `revision`, ADR 0015), 422 validation and domain failures, 429 rate limited.
 - Money as `*_cents` integers plus `currency`, quantities as decimal strings (`"12.500"`), one name per field.
 - Critical writes require `Idempotency-Key`; state-changing requests send `X-CSRF-Token`.
+- Editing a product or a partner sends back the `revision` it read; a newer one on the server answers 409 `stale` and writes nothing (ADR 0015).
 - The OpenAPI document is written first; request specs validate every response against it and the SPA types are generated from it.
 
 ## Tests

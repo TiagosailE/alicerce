@@ -5,7 +5,7 @@ module AuditsUpdates
   extend ActiveSupport::Concern
 
   private
-    def field_changes(record, exclude: %w[created_at updated_at])
+    def field_changes(record, exclude: %w[created_at updated_at revision])
       record.saved_changes.except(*exclude).transform_values { |(from, to)| { from:, to: } }
     end
 end

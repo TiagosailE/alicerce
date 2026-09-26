@@ -182,6 +182,7 @@ CREATE TABLE public.catalog_partners (
     active boolean DEFAULT true NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL,
+    revision integer DEFAULT 0 NOT NULL,
     CONSTRAINT catalog_partners_customer_or_supplier CHECK ((customer OR supplier)),
     CONSTRAINT catalog_partners_document_type_valid CHECK (((document_type)::text = ANY ((ARRAY['cpf'::character varying, 'cnpj'::character varying])::text[])))
 );
@@ -219,7 +220,8 @@ CREATE TABLE public.catalog_products (
     stock_unit_id bigint NOT NULL,
     active boolean DEFAULT true NOT NULL,
     created_at timestamp(6) without time zone NOT NULL,
-    updated_at timestamp(6) without time zone NOT NULL
+    updated_at timestamp(6) without time zone NOT NULL,
+    revision integer DEFAULT 0 NOT NULL
 );
 
 
@@ -2266,6 +2268,7 @@ CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehous
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926110000'),
 ('20260926100100'),
 ('20260926100000'),
 ('20260921110000'),

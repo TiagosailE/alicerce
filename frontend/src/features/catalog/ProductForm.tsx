@@ -2,7 +2,7 @@ import { type SubmitEvent, useId, useState } from "react";
 import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
-import { requestIdSuffix } from "../../lib/errors";
+import { isStale, requestIdSuffix } from "../../lib/errors";
 import { parseDecimalInput, toDecimalInput } from "../../lib/format";
 import { type MessageKey, t } from "../../i18n";
 import type { Category, Product, ProductInput, Unit } from "./api";
@@ -17,7 +17,10 @@ const FIELD_ERROR_KEYS: Record<string, Partial<Record<string, MessageKey>>> = {
   sku: { blank: "products.fieldErrorSkuBlank", taken: "products.fieldErrorSkuTaken" },
   name: { blank: "products.fieldErrorNameBlank" },
   category: { not_found: "products.fieldErrorCategoryNotFound" },
-  stock_unit: { blank: "products.fieldErrorStockUnitBlank" },
+  stock_unit: {
+    blank: "products.fieldErrorStockUnitBlank",
+    immutable: "products.fieldErrorStockUnitImmutable",
+  },
   purchase_unit: { blank: "products.fieldErrorPurchaseUnitBlank" },
   factor: {
     blank: "products.fieldErrorFactorBlank",
@@ -44,6 +47,7 @@ function fieldErrorMessage(fieldErrors: Record<string, string[]>, field: string)
 }
 
 function productErrorMessage(error: unknown, kind: "create" | "update"): string {
+  if (isStale(error)) return t("products.updateStaleError");
   if (error instanceof ApiError && error.code === "validation_failed") {
     return kind === "create"
       ? t("products.createValidationError")
@@ -241,11 +245,16 @@ export function ProductForm({
           <select
             id={stockUnitFieldId}
             required
+            disabled={initial !== undefined}
             value={stockUnitId}
             onChange={(event) => {
               setStockUnitId(event.target.value);
             }}
-            aria-describedby={stockUnitError ? stockUnitErrorId : undefined}
+            aria-describedby={
+              stockUnitError
+                ? `${stockUnitErrorId} ${stockUnitFieldId}-hint`
+                : `${stockUnitFieldId}-hint`
+            }
             className="h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-focus"
           >
             <option value="" disabled>
@@ -257,6 +266,11 @@ export function ProductForm({
               </option>
             ))}
           </select>
+          {initial !== undefined && (
+            <p id={`${stockUnitFieldId}-hint`} className="mt-1 text-xs text-text-muted">
+              {t("products.stockUnitLockedHint")}
+            </p>
+          )}
           {stockUnitError && (
             <p id={stockUnitErrorId} role="alert" className="mt-1 text-xs text-danger">
               {stockUnitError}

@@ -36,11 +36,11 @@ module Api
       def update
         product = find_product
         authorize(product)
-        sku, name, stock_unit_id, purchase_unit_id, factor, active =
-          params.expect(:sku, :name, :stock_unit_id, :purchase_unit_id, :factor, :active)
+        sku, name, stock_unit_id, purchase_unit_id, factor, active, revision =
+          params.expect(:sku, :name, :stock_unit_id, :purchase_unit_id, :factor, :active, :revision)
 
         result = Catalog::UpdateProduct.call(
-          product:,
+          product:, revision: Integer(revision, exception: false),
           attributes: { sku:, name:, category_id: params[:category_id].presence, stock_unit_id:, active: },
           conversion_attributes: { purchase_unit_id:, factor: },
           actor: Current.user

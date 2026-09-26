@@ -665,6 +665,8 @@ export interface components {
             sku: string;
             name: string;
             active: boolean;
+            /** @description Counts the successful edits of this record (ADR 0015). Send back the value that was read; if the record changed since, the answer is 409 stale and nothing is written. */
+            revision: number;
             category: components["schemas"]["Category"] | null;
             stock_unit: components["schemas"]["Unit"];
             unit_conversion: components["schemas"]["UnitConversion"];
@@ -689,11 +691,14 @@ export interface components {
             sku: string;
             name: string;
             category_id?: number | null;
+            /** @description Must equal the product's current stock unit. A different one is a validation_failed with the kind immutable on stock_unit (ADR 0015). */
             stock_unit_id: number;
             purchase_unit_id: number;
             /** @description Decimal string, greater than zero, below 1000000000, at most 6 places (ADR 0006). More places or a larger value is a validation_failed (too_many_decimals, less_than), never a rounding. */
             factor: string;
             active: boolean;
+            /** @description The revision that was read; a newer one on the server answers 409 stale (ADR 0015). */
+            revision: number;
         };
         Warehouse: {
             id: number;
@@ -742,6 +747,8 @@ export interface components {
             /** @description False when the caller's role may not see this partner's CPF, e-mail and phone in full (ADR 0014: read_only). */
             personal_data_visible: boolean;
             active: boolean;
+            /** @description Counts the successful edits of this record (ADR 0015). Send back the value that was read; if the record changed since, the answer is 409 stale and nothing is written. */
+            revision: number;
         };
         PartnerResponseBody: {
             data: components["schemas"]["Partner"];
@@ -770,6 +777,8 @@ export interface components {
             email?: string;
             phone?: string;
             active: boolean;
+            /** @description The revision that was read; a newer one on the server answers 409 stale (ADR 0015). */
+            revision: number;
         };
     };
     responses: {
@@ -1275,6 +1284,7 @@ export interface operations {
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             422: components["responses"]["Error"];
         };
     };
@@ -1444,6 +1454,7 @@ export interface operations {
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             422: components["responses"]["Error"];
         };
     };

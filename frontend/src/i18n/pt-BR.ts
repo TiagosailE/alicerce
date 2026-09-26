@@ -11,6 +11,7 @@ export const ptBR = {
 
   "common.statusActive": "Ativo",
   "common.statusInactive": "Inativo",
+  "common.reload": "Recarregar",
 
   "role.owner": "Dono(a)",
   "role.admin": "Administrador(a)",
@@ -157,6 +158,11 @@ export const ptBR = {
   "products.updateSuccess": "Produto atualizado.",
   "products.updateGenericError": "Não foi possível atualizar o produto. Tente novamente.",
   "products.updateValidationError": "Verifique os campos do produto.",
+  "products.updateStaleError":
+    "Este produto foi alterado por outra pessoa depois que você o abriu, e nada foi salvo. Recarregue para ver a versão atual e refazer a edição.",
+  "products.stockUnitLockedHint":
+    "A unidade de estoque não pode ser alterada: as quantidades já registradas passariam a valer outra unidade.",
+  "products.fieldErrorStockUnitImmutable": "A unidade de estoque não pode ser alterada.",
 
   "warehouses.title": "Depósitos",
   "warehouses.loading": "Carregando depósitos…",
@@ -251,4 +257,6 @@ export const ptBR = {
   "partners.updateSuccess": "Parceiro atualizado.",
   "partners.updateGenericError": "Não foi possível atualizar o parceiro. Tente novamente.",
   "partners.updateValidationError": "Verifique os campos do parceiro.",
+  "partners.updateStaleError":
+    "Este parceiro foi alterado por outra pessoa depois que você o abriu, e nada foi salvo. Recarregue para ver a versão atual e refazer a edição.",
 } as const;
