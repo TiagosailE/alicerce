@@ -1,7 +1,7 @@
-import { type ReactNode, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
-import { Button } from "../../components/ui/Button";
+import { Button, buttonClass } from "../../components/ui/Button";
 import { SectionError } from "../../components/ui/SectionError";
 import { SectionLoading } from "../../components/ui/SectionLoading";
 import { Spinner } from "../../components/ui/Spinner";
@@ -13,15 +13,10 @@ import {
   formatMoneyCents,
   formatQuantity,
 } from "../../lib/format";
-import { type MessageKey, t, tf } from "../../i18n";
-import {
-  type PurchaseOrder,
-  useApprovePurchaseOrder,
-  useCancelPurchaseOrder,
-  usePurchaseOrder,
-} from "./api";
+import { t, tf } from "../../i18n";
+import { useApprovePurchaseOrder, useCancelPurchaseOrder, usePurchaseOrder } from "./api";
 import { OrderStatusBadge } from "./OrderStatusBadge";
-import { canCancel } from "./purchasingLabels";
+import { canCancel, orderIdFromParam, statusNote, termsText, wasSaved } from "./purchasingLabels";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -30,12 +25,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <dd className="text-sm text-text">{children}</dd>
     </div>
   );
-}
-
-function statusNote(status: PurchaseOrder["status"]): MessageKey {
-  if (status === "draft") return "purchasing.noteDraft";
-  if (status === "approved" || status === "partially_received") return "purchasing.noteApproved";
-  return "purchasing.noteClosed";
 }
 
 function approveMessage(error: unknown): string {
@@ -69,14 +58,52 @@ function cancelMessage(error: unknown): string {
  * allows is read from the status the API sent, never worked out here. */
 export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean }) {
   const { id } = useParams<{ id: string }>();
-  const orderId = Number(id);
+  const orderId = orderIdFromParam(id);
   const order = usePurchaseOrder(orderId);
   const approve = useApprovePurchaseOrder();
   const cancel = useCancelPurchaseOrder();
-  const status = useActionStatus();
+  const location = useLocation();
+  const saved = wasSaved(location.state);
+  const status = useActionStatus(
+    saved ? { kind: "success", text: t("purchasing.saveSuccess") } : null,
+  );
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const cancelTriggerRef = useRef<HTMLButtonElement>(null);
+  const cancelBackRef = useRef<HTMLButtonElement>(null);
+  const cancelTitleId = useId();
+  const cancelBodyId = useId();
   const navigate = useNavigate();
   const current = order.data;
+  const notFound =
+    orderId === null || (order.error instanceof ApiError && order.error.status === 404);
+  const approving = approve.isPending;
+
+  // A history entry keeps its state across a reload: the "saved" note is shown
+  // once, and the entry is rewritten without it.
+  useEffect(() => {
+    if (saved) void navigate(location.pathname, { replace: true, state: null });
+  }, [saved, navigate, location.pathname]);
+
+  function closeCancel() {
+    setConfirmingCancel(false);
+    cancelTriggerRef.current?.focus();
+  }
+
+  // The safe answer takes focus, so the dialog is announced and Enter does not
+  // cancel by accident; Escape leaves it and returns to the button that opened it.
+  useEffect(() => {
+    if (!confirmingCancel) return;
+    cancelBackRef.current?.focus();
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || cancel.isPending) return;
+      setConfirmingCancel(false);
+      cancelTriggerRef.current?.focus();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [confirmingCancel, cancel.isPending]);
 
   return (
     <div>
@@ -86,8 +113,9 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
         </Link>
       </p>
 
-      {order.isPending && <SectionLoading label={t("purchasing.detailLoading")} />}
-      {order.isError && (
+      {notFound && <p className="text-sm text-text-muted">{t("purchasing.detailNotFound")}</p>}
+      {!notFound && order.isPending && <SectionLoading label={t("purchasing.detailLoading")} />}
+      {!notFound && order.isError && (
         <SectionError
           message={t("purchasing.detailLoadError")}
           error={order.error}
@@ -105,22 +133,21 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
             </h1>
             <OrderStatusBadge status={current.status} />
           </div>
-          <p className="mb-4 text-sm text-text-muted">{t(statusNote(current.status))}</p>
+          <p className="mb-4 text-sm text-text-muted">{t(statusNote(current.status, canManage))}</p>
 
           {canManage && (
             <div className="mb-4 flex flex-wrap items-center gap-2">
               {current.status === "draft" && (
                 <>
-                  <Button
-                    onClick={() => {
-                      void navigate(`/compras/${String(current.id)}/editar`);
-                    }}
+                  <Link
+                    to={`/compras/${String(current.id)}/editar`}
+                    className={buttonClass("default")}
                   >
                     {t("purchasing.actionEdit")}
-                  </Button>
+                  </Link>
                   <Button
                     variant="primary"
-                    disabled={approve.isPending}
+                    disabled={approving}
                     onClick={() => {
                       status.clear();
                       approve.mutate(
@@ -136,13 +163,17 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
                       );
                     }}
                   >
-                    {approve.isPending && <Spinner />}
-                    {approve.isPending ? t("purchasing.approving") : t("purchasing.actionApprove")}
+                    {approving && <Spinner />}
+                    {approving ? t("purchasing.approving") : t("purchasing.actionApprove")}
                   </Button>
                 </>
               )}
-              {canCancel(current.status) && !confirmingCancel && (
+              {canCancel(current.status) && (
                 <Button
+                  ref={cancelTriggerRef}
+                  disabled={approving}
+                  aria-expanded={confirmingCancel}
+                  aria-controls={confirmingCancel ? cancelBodyId : undefined}
                   onClick={() => {
                     status.clear();
                     setConfirmingCancel(true);
@@ -157,15 +188,17 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
           {confirmingCancel && (
             <div
               role="alertdialog"
-              aria-labelledby="cancel-title"
-              aria-describedby="cancel-body"
+              aria-labelledby={cancelTitleId}
+              aria-describedby={cancelBodyId}
               className="mb-4 max-w-xl rounded-md border border-border-strong bg-surface-raised p-4"
             >
-              <h2 id="cancel-title" className="font-display mb-1 text-base text-text">
+              <h2 id={cancelTitleId} className="font-display mb-1 text-base text-text">
                 {tf("purchasing.cancelConfirmTitle", { number: String(current.number) })}
               </h2>
-              <p id="cancel-body" className="mb-3 text-sm text-text-muted">
-                {t("purchasing.cancelConfirmBody")}
+              <p id={cancelBodyId} className="mb-3 text-sm text-text-muted">
+                {current.status === "draft"
+                  ? t("purchasing.cancelConfirmBodyDraft")
+                  : t("purchasing.cancelConfirmBody")}
               </p>
               <div className="flex gap-2">
                 <Button
@@ -188,11 +221,10 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
                   {cancel.isPending ? t("purchasing.cancelling") : t("purchasing.cancelConfirm")}
                 </Button>
                 <Button
+                  ref={cancelBackRef}
                   variant="quiet"
                   disabled={cancel.isPending}
-                  onClick={() => {
-                    setConfirmingCancel(false);
-                  }}
+                  onClick={closeCancel}
                 >
                   {t("purchasing.cancelBack")}
                 </Button>
@@ -200,7 +232,7 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
             </div>
           )}
 
-          <StatusMessage status={status.status} />
+          <StatusMessage status={status.status} focusOnShow />
           {isStale(approve.error) && (
             <Button
               className="mb-3"
@@ -220,13 +252,7 @@ export function PurchaseOrderDetailScreen({ canManage }: { canManage: boolean })
             <Field label={t("purchasing.fieldDocument")}>
               <span className="num">{current.supplier.document_number}</span>
             </Field>
-            <Field label={t("purchasing.fieldTerms")}>
-              {tf("purchasing.termsValue", {
-                installments: String(current.installments),
-                first: String(current.first_due_days),
-                interval: String(current.interval_days),
-              })}
-            </Field>
+            <Field label={t("purchasing.fieldTerms")}>{termsText(current)}</Field>
             <Field label={t("purchasing.fieldTotal")}>
               <span className="num font-medium">{formatMoneyCents(current.total_cents)}</span>
             </Field>

@@ -103,13 +103,16 @@ export function useProducts(page: number, filters: ProductFilters = {}) {
  * still hold stock to count or write off), narrowed by a server-side search on
  * name and sku. The answer says how many matched in total, so a picker that
  * shows only the first page can tell the person to refine the search instead of
- * silently hiding the rest. */
-export function useProductOptions(q: string) {
+ * silently hiding the rest. With activeOnly the server leaves the inactive ones
+ * out, so they neither take a slot of the page nor count in the total. */
+export function useProductOptions(q: string, activeOnly = false) {
   return useQuery({
-    queryKey: ["catalog", "products", "options", q],
+    queryKey: ["catalog", "products", "options", q, { activeOnly }],
     queryFn: async () =>
       unwrapList<Product>(
-        await api.GET("/products", { params: { query: { per_page: 50, q: q || undefined } } }),
+        await api.GET("/products", {
+          params: { query: { per_page: 50, q: q || undefined, active: activeOnly || undefined } },
+        }),
       ),
     placeholderData: keepPreviousData,
   });

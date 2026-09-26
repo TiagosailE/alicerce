@@ -1,10 +1,16 @@
-import { useDeferredValue, useId, useState } from "react";
+import { type KeyboardEvent, useDeferredValue, useId, useState } from "react";
 import { t, tf } from "../../i18n";
 import { useProductOptions } from "../catalog/api";
 import { useSupplierOptions } from "./api";
 
 const inputClass =
   "h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-focus";
+
+/** Enter in a search box searches (the list narrows as one types); it must not
+ * submit the order form the box sits in, with every other field still empty. */
+function ignoreEnter(event: KeyboardEvent<HTMLInputElement>) {
+  if (event.key === "Enter") event.preventDefault();
+}
 
 export interface SupplierChoice {
   id: number;
@@ -56,6 +62,7 @@ export function SupplierPicker({
         onChange={(event) => {
           setQuery(event.target.value);
         }}
+        onKeyDown={ignoreEnter}
         className={`${inputClass} mb-2`}
       />
       <label htmlFor={selectId} className="mb-1 block text-sm font-medium text-text">
@@ -67,6 +74,7 @@ export function SupplierPicker({
         onChange={(event) => {
           onChange(choices.find((supplier) => String(supplier.id) === event.target.value) ?? null);
         }}
+        aria-required="true"
         aria-invalid={invalid ? true : undefined}
         aria-describedby={[errorId, noteId].filter(Boolean).join(" ")}
         className={inputClass}
@@ -106,16 +114,15 @@ export function ProductPicker({
   invalid: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const options = useProductOptions(useDeferredValue(query.trim()));
-  // An inactive product cannot be ordered, so it is not offered.
-  const found: ProductChoice[] = (options.data?.data ?? [])
-    .filter((product) => product.active)
-    .map((product) => ({
-      id: product.id,
-      name: product.name,
-      sku: product.sku,
-      unitCode: product.unit_conversion.purchase_unit.code,
-    }));
+  // An inactive product cannot be ordered, so the server does not offer it: it
+  // neither takes a slot of the page nor counts in the total shown.
+  const options = useProductOptions(useDeferredValue(query.trim()), true);
+  const found: ProductChoice[] = (options.data?.data ?? []).map((product) => ({
+    id: product.id,
+    name: product.name,
+    sku: product.sku,
+    unitCode: product.unit_conversion.purchase_unit.code,
+  }));
   const choices =
     value && !found.some((product) => product.id === value.id) ? [value, ...found] : found;
   const searchId = useId();
@@ -134,6 +141,7 @@ export function ProductPicker({
         onChange={(event) => {
           setQuery(event.target.value);
         }}
+        onKeyDown={ignoreEnter}
         className={`${inputClass} mb-2`}
       />
       <label htmlFor={selectId} className="mb-1 block text-sm font-medium text-text">
@@ -145,6 +153,7 @@ export function ProductPicker({
         onChange={(event) => {
           onChange(choices.find((product) => String(product.id) === event.target.value) ?? null);
         }}
+        aria-required="true"
         aria-invalid={invalid ? true : undefined}
         aria-describedby={[errorId, noteId].filter(Boolean).join(" ")}
         className={inputClass}

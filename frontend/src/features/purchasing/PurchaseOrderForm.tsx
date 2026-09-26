@@ -1,4 +1,4 @@
-import { type SubmitEvent, useId, useState } from "react";
+import { type SubmitEvent, useEffect, useId, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import { Button } from "../../components/ui/Button";
 import { Spinner } from "../../components/ui/Spinner";
@@ -17,6 +17,7 @@ import { ProductPicker, type ProductChoice, SupplierPicker, type SupplierChoice 
 
 const inputClass =
   "h-9 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-text focus-visible:outline-2 focus-visible:outline-focus";
+const numberInputClass = `${inputClass} num text-right`;
 
 interface LineState {
   key: string;
@@ -144,6 +145,23 @@ function serverMessage(fields: Record<string, string[]>, field: string): string 
   return t(key);
 }
 
+// The API's name for each field of the form, so editing a field can say which
+// error it answers.
+const TOP_FIELDS: Record<keyof OrderFormValues, string> = {
+  supplier: "supplier_id",
+  installments: "installments",
+  firstDueDays: "first_due_days",
+  intervalDays: "interval_days",
+  note: "note",
+  lines: "lines",
+};
+const LINE_FIELDS = {
+  product: "product_id",
+  quantity: "quantity",
+  price: "unit_price_cents",
+  discount: "discount_bp",
+} as const;
+
 const WHOLE_NUMBER = /^\d+$/;
 
 /** Everything the form can check by looking at the text, so a mistake is named
@@ -206,6 +224,11 @@ function bannerMessage(error: unknown): string {
   return t("purchasing.createGenericError");
 }
 
+/** What a focus move after a change is aimed at: the first control of a line
+ * just added, or the add button after a line was removed (the removed line's
+ * own button is gone). */
+type FocusTarget = { line: string } | "add";
+
 /** The create and edit form of a draft purchase order (ADR 0017). It collects
  * quantities, prices in reais and discounts in percent as text and turns them
  * into the API's representation by text rules; it never shows a total, because
@@ -227,49 +250,123 @@ export function PurchaseOrderForm({
 }) {
   const [values, setValues] = useState<OrderFormValues>(initial);
   const [clientErrors, setClientErrors] = useState<Record<string, MessageKey>>({});
+  // Fields whose answer from the server the person has edited since: their old
+  // message no longer describes what is in the field. "lines.*" stands for every
+  // line's own fields after a line was removed and the numbers moved up.
+  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
+  const [seenError, setSeenError] = useState(error);
+  const [attempts, setAttempts] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const pendingFocus = useRef<FocusTarget | null>(null);
   const installmentsId = useId();
   const firstDueId = useId();
   const intervalId = useId();
   const noteId = useId();
   const formId = useId();
 
+  if (seenError !== error) {
+    setSeenError(error);
+    setEdited(new Set());
+  }
+
   const serverFields = apiFieldErrors(error);
   const hasError = error !== null && error !== undefined;
+  const isEdited = (field: string) =>
+    edited.has(field) || (field.startsWith("lines.") && edited.has("lines.*"));
   const messageFor = (field: string): string | null => {
     const client = clientErrors[field];
-    return client ? t(client) : serverMessage(serverFields, field);
+    if (client) return t(client);
+    return isEdited(field) ? null : serverMessage(serverFields, field);
   };
   const knownField = (field: string) =>
     /^(supplier_id|installments|first_due_days|interval_days|note|lines)$/.test(field) ||
-    /^lines\.\d+\.(product_id|quantity|unit_price_cents|discount_bp)$/.test(field);
+    /^lines\.\d+(\.(product_id|quantity|unit_price_cents|discount_bp))?$/.test(field);
   const unplaced = Object.keys(serverFields).filter((field) => !knownField(field));
   const showBanner = hasError && (Object.keys(serverFields).length === 0 || unplaced.length > 0);
 
-  function update(next: Partial<OrderFormValues>) {
-    setValues((current) => ({ ...current, ...next }));
-    setClientErrors({});
+  const errorCount = [
+    ...Object.values(TOP_FIELDS),
+    ...values.lines.flatMap((_line, index) => [
+      `lines.${String(index)}`,
+      ...Object.values(LINE_FIELDS).map((field) => `lines.${String(index)}.${field}`),
+    ]),
+  ].filter((field) => messageFor(field) !== null).length;
+
+  // After a failed attempt (the form's own check or the server's answer) the
+  // person lands on the first field to fix, or on the banner when the failure is
+  // not about a field, so nothing has to be found by scrolling.
+  useEffect(() => {
+    if (attempts === 0 && !hasError) return;
+    const invalid = formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    (invalid ?? bannerRef.current)?.focus();
+  }, [attempts, error, hasError]);
+
+  useEffect(() => {
+    const target = pendingFocus.current;
+    if (!target) return;
+    pendingFocus.current = null;
+    if (target === "add") {
+      addRef.current?.focus();
+      return;
+    }
+    formRef.current
+      ?.querySelector<HTMLElement>(`[data-line-key="${target.line}"] input[type="search"]`)
+      ?.focus();
+  }, [values.lines]);
+
+  function fieldsEdited(fields: string[], linesShifted = false) {
+    setClientErrors((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(
+          ([field]) => !fields.includes(field) && !(linesShifted && field.startsWith("lines.")),
+        ),
+      ),
+    );
+    setEdited((current) => new Set([...current, ...fields, ...(linesShifted ? ["lines.*"] : [])]));
   }
 
-  function updateLine(key: string, next: Partial<LineState>) {
+  function update(next: Partial<OrderFormValues>, linesShifted = false) {
+    setValues((current) => ({ ...current, ...next }));
+    fieldsEdited(
+      (Object.keys(next) as (keyof OrderFormValues)[]).map((name) => TOP_FIELDS[name]),
+      linesShifted,
+    );
+  }
+
+  function updateLine(key: string, next: Partial<Omit<LineState, "key">>) {
+    const index = String(values.lines.findIndex((line) => line.key === key));
     setValues((current) => ({
       ...current,
       lines: current.lines.map((line) => (line.key === key ? { ...line, ...next } : line)),
     }));
-    setClientErrors({});
+    fieldsEdited([
+      `lines.${index}`,
+      ...(Object.keys(next) as (keyof typeof LINE_FIELDS)[]).map(
+        (name) => `lines.${index}.${LINE_FIELDS[name]}`,
+      ),
+    ]);
   }
 
   function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const { input, errors } = parseForm(values);
     setClientErrors(errors);
-    if (input) onSubmit(input);
+    if (input) {
+      onSubmit(input);
+      return;
+    }
+    setAttempts((count) => count + 1);
   }
 
   const supplierError = messageFor("supplier_id");
   const linesError = messageFor("lines");
+  const noteError = messageFor("note");
 
   return (
-    <form id={formId} onSubmit={submit} noValidate className="max-w-4xl">
+    <form ref={formRef} id={formId} onSubmit={submit} noValidate className="max-w-4xl">
+      <p className="mb-4 text-sm text-text-muted">{t("purchasing.formRequiredNote")}</p>
       <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <SupplierPicker
@@ -281,12 +378,12 @@ export function PurchaseOrderForm({
             }}
           />
           {supplierError && (
-            <p id={`${formId}-supplier-error`} role="alert" className="mt-1 text-xs text-danger">
+            <p id={`${formId}-supplier-error`} className="mt-1 text-xs text-danger">
               {supplierError}
             </p>
           )}
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-3">
           {(
             [
               [installmentsId, "purchasing.fieldInstallments", "installments", values.installments],
@@ -314,12 +411,13 @@ export function PurchaseOrderForm({
                           : { intervalDays: event.target.value },
                     );
                   }}
+                  aria-required="true"
                   aria-invalid={message ? true : undefined}
                   aria-describedby={message ? `${id}-error` : undefined}
-                  className={`${inputClass} num`}
+                  className={numberInputClass}
                 />
                 {message && (
-                  <p id={`${id}-error`} role="alert" className="mt-1 text-xs text-danger">
+                  <p id={`${id}-error`} className="mt-1 text-xs text-danger">
                     {message}
                   </p>
                 )}
@@ -329,12 +427,15 @@ export function PurchaseOrderForm({
         </div>
       </div>
 
-      <fieldset className="mb-5">
+      <fieldset
+        className="mb-5"
+        aria-describedby={linesError ? `${formId}-lines-error` : undefined}
+      >
         <legend className="font-display mb-2 text-base text-text">
           {t("purchasing.linesLegend")}
         </legend>
         {linesError && (
-          <p role="alert" className="mb-2 text-xs text-danger">
+          <p id={`${formId}-lines-error`} className="mb-2 text-xs text-danger">
             {linesError}
           </p>
         )}
@@ -345,147 +446,134 @@ export function PurchaseOrderForm({
             const quantityError = messageFor(at("quantity"));
             const priceError = messageFor(at("unit_price_cents"));
             const discountError = messageFor(at("discount_bp"));
-            const lineError = serverFields[`lines.${String(index)}`]
-              ? t("purchasing.fieldErrorGeneric")
-              : null;
+            const lineError = messageFor(`lines.${String(index)}`);
             const unit = line.product?.unitCode;
             const ids = `${formId}-line-${String(index)}`;
             return (
               <li
                 key={line.key}
+                data-line-key={line.key}
                 className="rounded-md border border-border-subtle bg-surface-raised p-3"
               >
-                <div className="mb-2 flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-text">
-                    {tf("purchasing.lineHeading", { number: String(index + 1) })}
-                  </h3>
-                  {values.lines.length > 1 && (
-                    <Button
-                      variant="quiet"
-                      onClick={() => {
-                        update({ lines: values.lines.filter((other) => other.key !== line.key) });
-                      }}
-                    >
-                      {tf("purchasing.removeLine", { number: String(index + 1) })}
-                    </Button>
-                  )}
-                </div>
-                {lineError && (
-                  <p role="alert" className="mb-2 text-xs text-danger">
-                    {lineError}
-                  </p>
-                )}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <ProductPicker
-                      value={line.product}
-                      invalid={productError !== null}
-                      errorId={productError ? `${ids}-product-error` : undefined}
-                      onChange={(product) => {
-                        updateLine(line.key, { product });
-                      }}
-                    />
-                    {productError && (
-                      <p
-                        id={`${ids}-product-error`}
-                        role="alert"
-                        className="mt-1 text-xs text-danger"
+                <div role="group" aria-labelledby={`${ids}-heading`}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h2 id={`${ids}-heading`} className="text-sm font-medium text-text">
+                      {tf("purchasing.lineHeading", { number: String(index + 1) })}
+                    </h2>
+                    {values.lines.length > 1 && (
+                      <Button
+                        variant="quiet"
+                        onClick={() => {
+                          pendingFocus.current = "add";
+                          update(
+                            { lines: values.lines.filter((other) => other.key !== line.key) },
+                            true,
+                          );
+                        }}
                       >
-                        {productError}
-                      </p>
+                        {tf("purchasing.removeLine", { number: String(index + 1) })}
+                      </Button>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {lineError && <p className="mb-2 text-xs text-danger">{lineError}</p>}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div>
-                      <label
-                        htmlFor={`${ids}-quantity`}
-                        className="mb-1 block text-sm font-medium text-text"
-                      >
-                        {unit
-                          ? tf("purchasing.fieldQuantity", { unit })
-                          : t("purchasing.fieldQuantityNoUnit")}
-                      </label>
-                      <input
-                        id={`${ids}-quantity`}
-                        type="text"
-                        inputMode="decimal"
-                        value={line.quantity}
-                        onChange={(event) => {
-                          updateLine(line.key, { quantity: event.target.value });
+                      <ProductPicker
+                        value={line.product}
+                        invalid={productError !== null}
+                        errorId={productError ? `${ids}-product-error` : undefined}
+                        onChange={(product) => {
+                          updateLine(line.key, { product });
                         }}
-                        aria-invalid={quantityError ? true : undefined}
-                        aria-describedby={quantityError ? `${ids}-quantity-error` : undefined}
-                        className={`${inputClass} num`}
                       />
-                      {quantityError && (
-                        <p
-                          id={`${ids}-quantity-error`}
-                          role="alert"
-                          className="mt-1 text-xs text-danger"
-                        >
-                          {quantityError}
+                      {productError && (
+                        <p id={`${ids}-product-error`} className="mt-1 text-xs text-danger">
+                          {productError}
                         </p>
                       )}
                     </div>
-                    <div>
-                      <label
-                        htmlFor={`${ids}-price`}
-                        className="mb-1 block text-sm font-medium text-text"
-                      >
-                        {unit
-                          ? tf("purchasing.fieldUnitPrice", { unit })
-                          : t("purchasing.fieldUnitPriceNoUnit")}
-                      </label>
-                      <input
-                        id={`${ids}-price`}
-                        type="text"
-                        inputMode="decimal"
-                        value={line.price}
-                        onChange={(event) => {
-                          updateLine(line.key, { price: event.target.value });
-                        }}
-                        aria-invalid={priceError ? true : undefined}
-                        aria-describedby={priceError ? `${ids}-price-error` : undefined}
-                        className={`${inputClass} num`}
-                      />
-                      {priceError && (
-                        <p
-                          id={`${ids}-price-error`}
-                          role="alert"
-                          className="mt-1 text-xs text-danger"
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                      <div>
+                        <label
+                          htmlFor={`${ids}-quantity`}
+                          className="mb-1 block text-sm font-medium text-text"
                         >
-                          {priceError}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <label
-                        htmlFor={`${ids}-discount`}
-                        className="mb-1 block text-sm font-medium text-text"
-                      >
-                        {t("purchasing.fieldDiscount")}
-                      </label>
-                      <input
-                        id={`${ids}-discount`}
-                        type="text"
-                        inputMode="decimal"
-                        value={line.discount}
-                        onChange={(event) => {
-                          updateLine(line.key, { discount: event.target.value });
-                        }}
-                        aria-invalid={discountError ? true : undefined}
-                        aria-describedby={discountError ? `${ids}-discount-error` : undefined}
-                        className={`${inputClass} num`}
-                      />
-                      {discountError && (
-                        <p
-                          id={`${ids}-discount-error`}
-                          role="alert"
-                          className="mt-1 text-xs text-danger"
+                          {unit
+                            ? tf("purchasing.fieldQuantity", { unit })
+                            : t("purchasing.fieldQuantityNoUnit")}
+                        </label>
+                        <input
+                          id={`${ids}-quantity`}
+                          type="text"
+                          inputMode="decimal"
+                          value={line.quantity}
+                          onChange={(event) => {
+                            updateLine(line.key, { quantity: event.target.value });
+                          }}
+                          aria-required="true"
+                          aria-invalid={quantityError ? true : undefined}
+                          aria-describedby={quantityError ? `${ids}-quantity-error` : undefined}
+                          className={numberInputClass}
+                        />
+                        {quantityError && (
+                          <p id={`${ids}-quantity-error`} className="mt-1 text-xs text-danger">
+                            {quantityError}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label
+                          htmlFor={`${ids}-price`}
+                          className="mb-1 block text-sm font-medium text-text"
                         >
-                          {discountError}
-                        </p>
-                      )}
+                          {unit
+                            ? tf("purchasing.fieldUnitPrice", { unit })
+                            : t("purchasing.fieldUnitPriceNoUnit")}
+                        </label>
+                        <input
+                          id={`${ids}-price`}
+                          type="text"
+                          inputMode="decimal"
+                          value={line.price}
+                          onChange={(event) => {
+                            updateLine(line.key, { price: event.target.value });
+                          }}
+                          aria-required="true"
+                          aria-invalid={priceError ? true : undefined}
+                          aria-describedby={priceError ? `${ids}-price-error` : undefined}
+                          className={numberInputClass}
+                        />
+                        {priceError && (
+                          <p id={`${ids}-price-error`} className="mt-1 text-xs text-danger">
+                            {priceError}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label
+                          htmlFor={`${ids}-discount`}
+                          className="mb-1 block text-sm font-medium text-text"
+                        >
+                          {t("purchasing.fieldDiscount")}
+                        </label>
+                        <input
+                          id={`${ids}-discount`}
+                          type="text"
+                          inputMode="decimal"
+                          value={line.discount}
+                          onChange={(event) => {
+                            updateLine(line.key, { discount: event.target.value });
+                          }}
+                          aria-invalid={discountError ? true : undefined}
+                          aria-describedby={discountError ? `${ids}-discount-error` : undefined}
+                          className={numberInputClass}
+                        />
+                        {discountError && (
+                          <p id={`${ids}-discount-error`} className="mt-1 text-xs text-danger">
+                            {discountError}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -494,9 +582,12 @@ export function PurchaseOrderForm({
           })}
         </ol>
         <Button
+          ref={addRef}
           className="mt-3"
           onClick={() => {
-            update({ lines: [...values.lines, newLine()] });
+            const added = newLine();
+            pendingFocus.current = { line: added.key };
+            update({ lines: [...values.lines, added] });
           }}
         >
           {t("purchasing.addLine")}
@@ -516,12 +607,13 @@ export function PurchaseOrderForm({
           onChange={(event) => {
             update({ note: event.target.value });
           }}
-          aria-invalid={messageFor("note") ? true : undefined}
+          aria-invalid={noteError ? true : undefined}
+          aria-describedby={noteError ? `${noteId}-error` : undefined}
           className={inputClass}
         />
-        {messageFor("note") && (
-          <p role="alert" className="mt-1 text-xs text-danger">
-            {messageFor("note")}
+        {noteError && (
+          <p id={`${noteId}-error`} className="mt-1 text-xs text-danger">
+            {noteError}
           </p>
         )}
       </div>
@@ -535,8 +627,20 @@ export function PurchaseOrderForm({
           {t("purchasing.formCancel")}
         </Button>
       </div>
+      {errorCount > 0 && (
+        <p role="alert" className="mt-3 text-sm text-danger">
+          {errorCount === 1
+            ? t("purchasing.formErrorSummaryOne")
+            : tf("purchasing.formErrorSummaryMany", { count: String(errorCount) })}
+        </p>
+      )}
       {showBanner && (
-        <div role="alert" className="mt-3 text-sm text-danger">
+        <div
+          ref={bannerRef}
+          tabIndex={-1}
+          role="alert"
+          className="mt-3 text-sm text-danger focus-visible:outline-2 focus-visible:outline-focus"
+        >
           <p>
             {bannerMessage(error)}
             {requestIdSuffix(error)}

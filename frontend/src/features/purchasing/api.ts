@@ -1,5 +1,11 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, csrfHeader, unwrap, unwrapList } from "../../api/client";
+import {
+  keepPreviousData,
+  type QueryClient,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { ApiError, api, csrfHeader, unwrap, unwrapList } from "../../api/client";
 import type { components } from "../../api/schema";
 import type { PartnerSummary } from "../catalog/api";
 
@@ -61,12 +67,24 @@ export function usePurchaseOrders(page: number, filters: PurchaseOrderFilters = 
   });
 }
 
-export function usePurchaseOrder(id: number) {
+/** An order by id; a null id (an address that is not a number) asks for nothing. */
+export function usePurchaseOrder(id: number | null) {
   return useQuery({
     queryKey: [...ordersKey, "detail", id],
     queryFn: async () =>
-      unwrap(await api.GET("/purchase_orders/{id}", { params: { path: { id } } })),
+      unwrap(await api.GET("/purchase_orders/{id}", { params: { path: { id: id ?? 0 } } })),
+    enabled: id !== null,
   });
+}
+
+/** A refused transition means the screen is showing a state the order has left:
+ * fetch it again so its buttons and status catch up. A stale approval is left
+ * out on purpose: the person must reload and see the new conditions themselves
+ * before approving them. */
+function refreshWhenOutdated(queryClient: QueryClient, id: number, error: unknown) {
+  if (error instanceof ApiError && error.code === "invalid_transition") {
+    void queryClient.invalidateQueries({ queryKey: [...ordersKey, "detail", id] });
+  }
 }
 
 /** Active suppliers for a picker, narrowed by a server-side search; the answer
@@ -136,6 +154,9 @@ export function useApprovePurchaseOrder() {
       queryClient.setQueryData([...ordersKey, "detail", order.id], order);
       void queryClient.invalidateQueries({ queryKey: ordersKey });
     },
+    onError: (error, { id }) => {
+      refreshWhenOutdated(queryClient, id, error);
+    },
   });
 }
 
@@ -152,6 +173,9 @@ export function useCancelPurchaseOrder() {
     onSuccess: (order) => {
       queryClient.setQueryData([...ordersKey, "detail", order.id], order);
       void queryClient.invalidateQueries({ queryKey: ordersKey });
+    },
+    onError: (error, id) => {
+      refreshWhenOutdated(queryClient, id, error);
     },
   });
 }
