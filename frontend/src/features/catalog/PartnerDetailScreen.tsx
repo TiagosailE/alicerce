@@ -6,6 +6,7 @@ import { SectionLoading } from "../../components/ui/SectionLoading";
 import { StatusMessage, useActionStatus } from "../../components/ui/StatusMessage";
 import { t } from "../../i18n";
 import { isStale } from "../../lib/errors";
+import { useOpenedRevision } from "../../lib/useOpenedRevision";
 import { usePartner, useUpdatePartner } from "./api";
 import { PartnerForm, partnerKindLabel, partnerToInitial } from "./PartnerForm";
 
@@ -28,6 +29,7 @@ export function PartnerDetailScreen({ canManage }: { canManage: boolean }) {
   // fields keep their own state.
   const [formKey, setFormKey] = useState(0);
   const current = partner.data;
+  const opened = useOpenedRevision(current?.revision);
 
   return (
     <div>
@@ -67,9 +69,10 @@ export function PartnerDetailScreen({ canManage }: { canManage: boolean }) {
                 showActiveToggle
                 onSubmit={(input) => {
                   updatePartner.mutate(
-                    { id: partnerId, revision: current.revision, ...input },
+                    { id: partnerId, revision: opened.revision ?? current.revision, ...input },
                     {
-                      onSuccess: () => {
+                      onSuccess: (saved) => {
+                        opened.adopt(saved.revision);
                         status.succeed(t("partners.updateSuccess"));
                       },
                     },
@@ -84,6 +87,7 @@ export function PartnerDetailScreen({ canManage }: { canManage: boolean }) {
                   onClick={() => {
                     void partner.refetch().then(() => {
                       updatePartner.reset();
+                      opened.adopt(null);
                       setFormKey((key) => key + 1);
                     });
                   }}
