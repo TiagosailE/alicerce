@@ -469,6 +469,105 @@ paths:
         "422":
           $ref: "#/components/responses/Error"
 
+  /stock_balances:
+    get:
+      operationId: listStockBalances
+      summary: List the stock position, one row per product and warehouse
+      description: Every role can read (ADR 0016).
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: warehouse_id
+          in: query
+          schema: { type: integer }
+        - name: product_id
+          in: query
+          schema: { type: integer }
+        - name: q
+          in: query
+          description: Searches the product's name and sku.
+          schema: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/StockBalanceListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /stock_movements:
+    get:
+      operationId: listStockMovements
+      summary: List the movement ledger, newest first
+      description: Every role can read (ADR 0016).
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: warehouse_id
+          in: query
+          schema: { type: integer }
+        - name: product_id
+          in: query
+          schema: { type: integer }
+        - name: reason
+          in: query
+          schema: { $ref: "#/components/schemas/AdjustmentReason" }
+      responses:
+        "200":
+          $ref: "#/components/responses/StockMovementListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /stock_adjustments:
+    post:
+      operationId: createStockAdjustment
+      summary: Record a count adjustment
+      description: >
+        Sets the stock of a product in a warehouse to the counted quantity and
+        records the difference as one ledger movement (ADR 0016). Owner, admin
+        and purchasing only (ADR 0008). A count equal to the balance writes no
+        movement and answers 200 with a null movement.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StockAdjustmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/StockAdjustmentResponse"
+        "201":
+          $ref: "#/components/responses/StockAdjustmentResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
   /partners:
     get:
       operationId: listPartners
@@ -825,6 +924,20 @@ components:
       description: The csrf_token from the most recent GET or POST /session response.
       schema:
         type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        A client-generated key of 8 to 100 characters (letters, digits and
+        . _ : -), one per user intent (ADR 0005). Repeating a request with the
+        same key and the same body replays its result without a second effect;
+        the same key with another body is a 422 idempotency_key_reused. Only
+        successes are remembered, so a failed attempt can be retried.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 100
 
   responses:
     SessionResponse:
@@ -917,6 +1030,24 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/WarehouseListResponseBody"
+    StockBalanceListResponse:
+      description: A page of the stock position.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StockBalanceListResponseBody"
+    StockMovementListResponse:
+      description: A page of the movement ledger, newest first.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StockMovementListResponseBody"
+    StockAdjustmentResponse:
+      description: The movement that was written, or null when the count matched, and the balance after it.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/StockAdjustmentResponseBody"
     PartnerResponse:
       description: A partner.
       content:
@@ -1421,6 +1552,163 @@ components:
       properties:
         name: { type: string }
         active: { type: boolean }
+
+    AdjustmentReason:
+      type: string
+      enum: [ opening_balance, count, loss, damage, theft, expiry, found, other ]
+
+    ProductReference:
+      type: object
+      description: A product as a balance or a movement refers to it.
+      additionalProperties: false
+      required: [ id, sku, name, stock_unit ]
+      properties:
+        id: { type: integer }
+        sku: { type: string }
+        name: { type: string }
+        stock_unit:
+          $ref: "#/components/schemas/Unit"
+
+    StockBalance:
+      type: object
+      additionalProperties: false
+      required: [ id, product, warehouse, on_hand, reserved, available, value_cents, currency, last_unit_cost ]
+      properties:
+        id: { type: integer }
+        product:
+          $ref: "#/components/schemas/ProductReference"
+        warehouse:
+          $ref: "#/components/schemas/Warehouse"
+        on_hand:
+          type: string
+          pattern: '^-?[0-9]{1,12}\.[0-9]{3}$'
+          description: Decimal string with 3 places, in the product's stock unit (ADR 0006).
+        reserved:
+          type: string
+          pattern: '^[0-9]{1,12}\.[0-9]{3}$'
+        available:
+          type: string
+          pattern: '^-?[0-9]{1,12}\.[0-9]{3}$'
+          description: on_hand minus reserved, computed by the API.
+        value_cents:
+          type: integer
+          description: The inventory value of on_hand, in cents (ADR 0006).
+        currency:
+          type: string
+          enum: [ BRL ]
+        last_unit_cost:
+          type: string
+          pattern: '^[0-9]{1,13}\.[0-9]{6}$'
+          description: Cost per stock unit of the latest costed entry, in cents, up to 6 places.
+
+    StockMovement:
+      type: object
+      additionalProperties: false
+      required: [ id, kind, reason, note, product, warehouse, quantity, value_cents, currency, on_hand_after, value_after_cents, actor, created_at ]
+      properties:
+        id: { type: integer }
+        kind:
+          type: string
+          enum: [ adjustment ]
+        reason:
+          nullable: true
+          allOf: [ { $ref: "#/components/schemas/AdjustmentReason" } ]
+        note:
+          type: string
+          nullable: true
+        product:
+          $ref: "#/components/schemas/ProductReference"
+        warehouse:
+          $ref: "#/components/schemas/Warehouse"
+        quantity:
+          type: string
+          pattern: '^-?[0-9]{1,12}\.[0-9]{3}$'
+          description: Signed, and a negative quantity takes stock out.
+        value_cents:
+          type: integer
+          description: Signed like quantity.
+        currency:
+          type: string
+          enum: [ BRL ]
+        on_hand_after:
+          type: string
+          pattern: '^-?[0-9]{1,12}\.[0-9]{3}$'
+        value_after_cents: { type: integer }
+        actor:
+          type: object
+          additionalProperties: false
+          required: [ id, name ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        created_at:
+          type: string
+          format: date-time
+
+    StockBalanceListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/StockBalance" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    StockMovementListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/StockMovement" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    StockAdjustmentResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [ movement, balance ]
+          properties:
+            movement:
+              nullable: true
+              allOf: [ { $ref: "#/components/schemas/StockMovement" } ]
+            balance:
+              $ref: "#/components/schemas/StockBalance"
+
+    StockAdjustmentRequest:
+      type: object
+      additionalProperties: false
+      required: [ product_id, warehouse_id, counted_quantity, reason ]
+      properties:
+        product_id: { type: integer }
+        warehouse_id: { type: integer }
+        counted_quantity:
+          type: string
+          pattern: '^[0-9]{1,12}(\.[0-9]{1,3})?$'
+          description: >
+            The quantity actually counted, in the product's stock unit, at most
+            3 places. The API computes the difference from the balance under
+            its lock; the client never does.
+        reason:
+          $ref: "#/components/schemas/AdjustmentReason"
+        note:
+          type: string
+          maxLength: 500
+        unit_cost:
+          type: string
+          pattern: '^[0-9]{1,13}(\.[0-9]{1,6})?$'
+          description: >
+            Cost per stock unit in cents, at most 6 places, for an increase.
+            Required when the balance has no average or last cost to value it
+            with (unit_cost required); not allowed for a decrease (ADR 0016).
 
     PartnerSummary:
       type: object

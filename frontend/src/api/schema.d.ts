@@ -255,6 +255,66 @@ export interface paths {
         patch: operations["updateWarehouse"];
         trace?: never;
     };
+    "/stock_balances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the stock position, one row per product and warehouse
+         * @description Every role can read (ADR 0016).
+         */
+        get: operations["listStockBalances"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock_movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the movement ledger, newest first
+         * @description Every role can read (ADR 0016).
+         */
+        get: operations["listStockMovements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stock_adjustments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Record a count adjustment
+         * @description Sets the stock of a product in a warehouse to the counted quantity and records the difference as one ledger movement (ADR 0016). Owner, admin and purchasing only (ADR 0008). A count equal to the balance writes no movement and answers 200 with a null movement.
+         */
+        post: operations["createStockAdjustment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/partners": {
         parameters: {
             query?: never;
@@ -719,6 +779,78 @@ export interface components {
             name: string;
             active: boolean;
         };
+        /** @enum {string} */
+        AdjustmentReason: "opening_balance" | "count" | "loss" | "damage" | "theft" | "expiry" | "found" | "other";
+        /** @description A product as a balance or a movement refers to it. */
+        ProductReference: {
+            id: number;
+            sku: string;
+            name: string;
+            stock_unit: components["schemas"]["Unit"];
+        };
+        StockBalance: {
+            id: number;
+            product: components["schemas"]["ProductReference"];
+            warehouse: components["schemas"]["Warehouse"];
+            /** @description Decimal string with 3 places, in the product's stock unit (ADR 0006). */
+            on_hand: string;
+            reserved: string;
+            /** @description on_hand minus reserved, computed by the API. */
+            available: string;
+            /** @description The inventory value of on_hand, in cents (ADR 0006). */
+            value_cents: number;
+            /** @enum {string} */
+            currency: "BRL";
+            /** @description Cost per stock unit of the latest costed entry, in cents, up to 6 places. */
+            last_unit_cost: string;
+        };
+        StockMovement: {
+            id: number;
+            /** @enum {string} */
+            kind: "adjustment";
+            reason: components["schemas"]["AdjustmentReason"] | null;
+            note: string | null;
+            product: components["schemas"]["ProductReference"];
+            warehouse: components["schemas"]["Warehouse"];
+            /** @description Signed, and a negative quantity takes stock out. */
+            quantity: string;
+            /** @description Signed like quantity. */
+            value_cents: number;
+            /** @enum {string} */
+            currency: "BRL";
+            on_hand_after: string;
+            value_after_cents: number;
+            actor: {
+                id: number;
+                name: string;
+            };
+            /** Format: date-time */
+            created_at: string;
+        };
+        StockBalanceListResponseBody: {
+            data: components["schemas"]["StockBalance"][];
+            meta: components["schemas"]["Meta"];
+        };
+        StockMovementListResponseBody: {
+            data: components["schemas"]["StockMovement"][];
+            meta: components["schemas"]["Meta"];
+        };
+        StockAdjustmentResponseBody: {
+            data: {
+                movement: components["schemas"]["StockMovement"] | null;
+                balance: components["schemas"]["StockBalance"];
+            };
+        };
+        StockAdjustmentRequest: {
+            product_id: number;
+            warehouse_id: number;
+            /** @description The quantity actually counted, in the product's stock unit, at most 3 places. The API computes the difference from the balance under its lock; the client never does. */
+            counted_quantity: string;
+            reason: components["schemas"]["AdjustmentReason"];
+            note?: string;
+            /** @description Cost per stock unit in cents, at most 6 places, for an increase. Required when the balance has no average or last cost to value it with (unit_cost required); not allowed for a decrease (ADR 0016). */
+            unit_cost?: string;
+        };
         /** @description A partner as listed (ADR 0014). The CPF is masked for every role and e-mail and phone are not part of a list; the full record comes from GET /partners/{id}. */
         PartnerSummary: {
             id: number;
@@ -917,6 +1049,33 @@ export interface components {
                 "application/json": components["schemas"]["WarehouseListResponseBody"];
             };
         };
+        /** @description A page of the stock position. */
+        StockBalanceListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["StockBalanceListResponseBody"];
+            };
+        };
+        /** @description A page of the movement ledger, newest first. */
+        StockMovementListResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["StockMovementListResponseBody"];
+            };
+        };
+        /** @description The movement that was written, or null when the count matched, and the balance after it. */
+        StockAdjustmentResponse: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["StockAdjustmentResponseBody"];
+            };
+        };
         /** @description A partner. */
         PartnerResponse: {
             headers: {
@@ -939,6 +1098,8 @@ export interface components {
     parameters: {
         /** @description The csrf_token from the most recent GET or POST /session response. */
         CsrfToken: string;
+        /** @description A client-generated key of 8 to 100 characters (letters, digits and . _ : -), one per user intent (ADR 0005). Repeating a request with the same key and the same body replays its result without a second effect; the same key with another body is a 422 idempotency_key_reused. Only successes are remembered, so a failed attempt can be retried. */
+        IdempotencyKey: string;
     };
     requestBodies: never;
     headers: never;
@@ -1367,6 +1528,77 @@ export interface operations {
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    listStockBalances: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                warehouse_id?: number;
+                product_id?: number;
+                /** @description Searches the product's name and sku. */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["StockBalanceListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    listStockMovements: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                warehouse_id?: number;
+                product_id?: number;
+                reason?: components["schemas"]["AdjustmentReason"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["StockMovementListResponse"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
+        };
+    };
+    createStockAdjustment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The csrf_token from the most recent GET or POST /session response. */
+                "X-CSRF-Token": components["parameters"]["CsrfToken"];
+                /** @description A client-generated key of 8 to 100 characters (letters, digits and . _ : -), one per user intent (ADR 0005). Repeating a request with the same key and the same body replays its result without a second effect; the same key with another body is a 422 idempotency_key_reused. Only successes are remembered, so a failed attempt can be retried. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StockAdjustmentRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["StockAdjustmentResponse"];
+            201: components["responses"]["StockAdjustmentResponse"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             422: components["responses"]["Error"];
         };
     };

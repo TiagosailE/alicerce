@@ -19,5 +19,6 @@ Decisions that are hard to reverse, cross modules or change the security posture
 | [0013](0013-sales-quotes-as-separate-document.md) | Sales quotes (orcamentos) are a separate document, not the sales order's draft state | accepted |
 | [0014](0014-partner-personal-data-visibility.md) | Partner personal data is masked in lists and hidden from the read_only role | accepted |
 | [0015](0015-concurrent-edits-and-master-data-that-documents-reference.md) | Master data edits are checked against a revision, and documents will not depend on live master data | accepted |
+| [0016](0016-stock-balances-ledger-and-count-adjustments.md) | Stock balances, an immutable movement ledger and count adjustments valued at average cost | accepted |
 
 Related: [architecture](../architecture.md), [threat model](../threat-model.md), [security checklist](../security.md), [scope](../scope.md), [deploy](../deploy.md).

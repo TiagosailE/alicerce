@@ -69,6 +69,23 @@ $$;
 
 
 --
+-- Name: inventory_movements_append_only(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.inventory_movements_append_only() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_user <> (SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = 'inventory_movements') THEN
+    RAISE EXCEPTION 'inventory_movements is append-only: % is not permitted for %', TG_OP, current_user;
+  END IF;
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+
+--
 -- Name: invitation_organization_id(character varying); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -314,6 +331,42 @@ ALTER SEQUENCE public.catalog_units_id_seq OWNED BY public.catalog_units.id;
 
 
 --
+-- Name: idempotency_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.idempotency_keys (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    user_id bigint NOT NULL,
+    key character varying NOT NULL,
+    request_digest character varying NOT NULL,
+    response_status integer,
+    resource_type character varying,
+    resource_id bigint,
+    created_at timestamp(6) without time zone NOT NULL
+);
+
+
+--
+-- Name: idempotency_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.idempotency_keys_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: idempotency_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.idempotency_keys_id_seq OWNED BY public.idempotency_keys.id;
+
+
+--
 -- Name: identity_invitations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -487,6 +540,98 @@ CREATE SEQUENCE public.identity_users_id_seq
 --
 
 ALTER SEQUENCE public.identity_users_id_seq OWNED BY public.identity_users.id;
+
+
+--
+-- Name: inventory_balances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_balances (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    warehouse_id bigint NOT NULL,
+    on_hand numeric(15,3) DEFAULT 0.0 NOT NULL,
+    reserved numeric(15,3) DEFAULT 0.0 NOT NULL,
+    negative_allowance numeric(15,3) DEFAULT 0.0 NOT NULL,
+    value_cents bigint DEFAULT 0 NOT NULL,
+    last_unit_cost numeric(19,6) DEFAULT 0.0 NOT NULL,
+    currency character varying(3) DEFAULT 'BRL'::character varying NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT inventory_balances_allowance_not_negative CHECK ((negative_allowance >= (0)::numeric)),
+    CONSTRAINT inventory_balances_currency_brl CHECK (((currency)::text = 'BRL'::text)),
+    CONSTRAINT inventory_balances_last_unit_cost_not_negative CHECK ((last_unit_cost >= (0)::numeric)),
+    CONSTRAINT inventory_balances_on_hand_within_allowance CHECK ((on_hand >= (- negative_allowance))),
+    CONSTRAINT inventory_balances_reserved_not_negative CHECK ((reserved >= (0)::numeric)),
+    CONSTRAINT inventory_balances_value_follows_stock CHECK ((((on_hand > (0)::numeric) AND (value_cents >= 0)) OR ((on_hand < (0)::numeric) AND (value_cents <= 0)) OR ((on_hand = (0)::numeric) AND (value_cents = 0))))
+);
+
+
+--
+-- Name: inventory_balances_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.inventory_balances_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: inventory_balances_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.inventory_balances_id_seq OWNED BY public.inventory_balances.id;
+
+
+--
+-- Name: inventory_movements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_movements (
+    id bigint NOT NULL,
+    organization_id bigint NOT NULL,
+    product_id bigint NOT NULL,
+    warehouse_id bigint NOT NULL,
+    kind character varying NOT NULL,
+    quantity numeric(15,3) NOT NULL,
+    value_cents bigint NOT NULL,
+    currency character varying(3) DEFAULT 'BRL'::character varying NOT NULL,
+    on_hand_after numeric(15,3) NOT NULL,
+    value_after_cents bigint NOT NULL,
+    reason character varying,
+    note text,
+    actor_user_id bigint NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT inventory_movements_adjustment_has_reason CHECK ((((kind)::text <> 'adjustment'::text) OR (reason IS NOT NULL))),
+    CONSTRAINT inventory_movements_adjustment_moves_stock CHECK ((((kind)::text <> 'adjustment'::text) OR (quantity <> (0)::numeric))),
+    CONSTRAINT inventory_movements_currency_brl CHECK (((currency)::text = 'BRL'::text)),
+    CONSTRAINT inventory_movements_kind_valid CHECK (((kind)::text = 'adjustment'::text)),
+    CONSTRAINT inventory_movements_reason_valid CHECK (((reason IS NULL) OR ((reason)::text = ANY ((ARRAY['opening_balance'::character varying, 'count'::character varying, 'loss'::character varying, 'damage'::character varying, 'theft'::character varying, 'expiry'::character varying, 'found'::character varying, 'other'::character varying])::text[])))),
+    CONSTRAINT inventory_movements_value_follows_quantity CHECK ((((quantity > (0)::numeric) AND (value_cents >= 0)) OR ((quantity < (0)::numeric) AND (value_cents <= 0)) OR (quantity = (0)::numeric)))
+);
+
+
+--
+-- Name: inventory_movements_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.inventory_movements_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: inventory_movements_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.inventory_movements_id_seq OWNED BY public.inventory_movements.id;
 
 
 --
@@ -1050,6 +1195,13 @@ ALTER TABLE ONLY public.catalog_units ALTER COLUMN id SET DEFAULT nextval('publi
 
 
 --
+-- Name: idempotency_keys id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.idempotency_keys ALTER COLUMN id SET DEFAULT nextval('public.idempotency_keys_id_seq'::regclass);
+
+
+--
 -- Name: identity_invitations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -1082,6 +1234,20 @@ ALTER TABLE ONLY public.identity_sessions ALTER COLUMN id SET DEFAULT nextval('p
 --
 
 ALTER TABLE ONLY public.identity_users ALTER COLUMN id SET DEFAULT nextval('public.identity_users_id_seq'::regclass);
+
+
+--
+-- Name: inventory_balances id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_balances ALTER COLUMN id SET DEFAULT nextval('public.inventory_balances_id_seq'::regclass);
+
+
+--
+-- Name: inventory_movements id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements ALTER COLUMN id SET DEFAULT nextval('public.inventory_movements_id_seq'::regclass);
 
 
 --
@@ -1246,6 +1412,14 @@ ALTER TABLE ONLY public.catalog_units
 
 
 --
+-- Name: idempotency_keys idempotency_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.idempotency_keys
+    ADD CONSTRAINT idempotency_keys_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: identity_invitations identity_invitations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1283,6 +1457,22 @@ ALTER TABLE ONLY public.identity_sessions
 
 ALTER TABLE ONLY public.identity_users
     ADD CONSTRAINT identity_users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: inventory_balances inventory_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_balances
+    ADD CONSTRAINT inventory_balances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: inventory_movements inventory_movements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT inventory_movements_pkey PRIMARY KEY (id);
 
 
 --
@@ -1561,6 +1751,34 @@ CREATE UNIQUE INDEX index_catalog_units_on_organization_id_and_id ON public.cata
 
 
 --
+-- Name: index_idempotency_keys_on_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_idempotency_keys_on_created_at ON public.idempotency_keys USING btree (created_at);
+
+
+--
+-- Name: index_idempotency_keys_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_idempotency_keys_on_organization_id ON public.idempotency_keys USING btree (organization_id);
+
+
+--
+-- Name: index_idempotency_keys_on_organization_user_and_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_idempotency_keys_on_organization_user_and_key ON public.idempotency_keys USING btree (organization_id, user_id, key);
+
+
+--
+-- Name: index_idempotency_keys_on_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_idempotency_keys_on_user_id ON public.idempotency_keys USING btree (user_id);
+
+
+--
 -- Name: index_identity_invitations_on_accepted_by_user_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1642,6 +1860,76 @@ CREATE INDEX index_identity_sessions_on_user_id ON public.identity_sessions USIN
 --
 
 CREATE UNIQUE INDEX index_identity_users_on_lower_email ON public.identity_users USING btree (lower((email)::text));
+
+
+--
+-- Name: index_inventory_balances_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_balances_on_organization_id ON public.inventory_balances USING btree (organization_id);
+
+
+--
+-- Name: index_inventory_balances_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_inventory_balances_on_organization_id_and_id ON public.inventory_balances USING btree (organization_id, id);
+
+
+--
+-- Name: index_inventory_balances_on_organization_id_and_warehouse_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_balances_on_organization_id_and_warehouse_id ON public.inventory_balances USING btree (organization_id, warehouse_id);
+
+
+--
+-- Name: index_inventory_balances_on_organization_product_and_warehouse; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_inventory_balances_on_organization_product_and_warehouse ON public.inventory_balances USING btree (organization_id, product_id, warehouse_id);
+
+
+--
+-- Name: index_inventory_movements_on_actor_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_actor_user_id ON public.inventory_movements USING btree (actor_user_id);
+
+
+--
+-- Name: index_inventory_movements_on_organization_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_organization_id ON public.inventory_movements USING btree (organization_id);
+
+
+--
+-- Name: index_inventory_movements_on_organization_id_and_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_organization_id_and_created_at ON public.inventory_movements USING btree (organization_id, created_at);
+
+
+--
+-- Name: index_inventory_movements_on_organization_id_and_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_inventory_movements_on_organization_id_and_id ON public.inventory_movements USING btree (organization_id, id);
+
+
+--
+-- Name: index_inventory_movements_on_organization_product_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_organization_product_and_time ON public.inventory_movements USING btree (organization_id, product_id, created_at);
+
+
+--
+-- Name: index_inventory_movements_on_organization_warehouse_and_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_inventory_movements_on_organization_warehouse_and_time ON public.inventory_movements USING btree (organization_id, warehouse_id, created_at);
 
 
 --
@@ -1918,6 +2206,13 @@ CREATE TRIGGER audit_events_append_only BEFORE DELETE OR UPDATE ON public.audit_
 
 
 --
+-- Name: inventory_movements inventory_movements_append_only; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER inventory_movements_append_only BEFORE DELETE OR UPDATE ON public.inventory_movements FOR EACH ROW EXECUTE FUNCTION public.inventory_movements_append_only();
+
+
+--
 -- Name: catalog_products fk_catalog_products_category_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1947,6 +2242,46 @@ ALTER TABLE ONLY public.catalog_unit_conversions
 
 ALTER TABLE ONLY public.catalog_unit_conversions
     ADD CONSTRAINT fk_catalog_unit_conversions_purchase_unit_same_organization FOREIGN KEY (organization_id, purchase_unit_id) REFERENCES public.catalog_units(organization_id, id);
+
+
+--
+-- Name: inventory_balances fk_inventory_balances_product_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_balances
+    ADD CONSTRAINT fk_inventory_balances_product_same_organization FOREIGN KEY (organization_id, product_id) REFERENCES public.catalog_products(organization_id, id);
+
+
+--
+-- Name: inventory_balances fk_inventory_balances_warehouse_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_balances
+    ADD CONSTRAINT fk_inventory_balances_warehouse_same_organization FOREIGN KEY (organization_id, warehouse_id) REFERENCES public.inventory_warehouses(organization_id, id);
+
+
+--
+-- Name: inventory_movements fk_inventory_movements_product_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT fk_inventory_movements_product_same_organization FOREIGN KEY (organization_id, product_id) REFERENCES public.catalog_products(organization_id, id);
+
+
+--
+-- Name: inventory_movements fk_inventory_movements_warehouse_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT fk_inventory_movements_warehouse_same_organization FOREIGN KEY (organization_id, warehouse_id) REFERENCES public.inventory_warehouses(organization_id, id);
+
+
+--
+-- Name: idempotency_keys fk_rails_149452d765; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.idempotency_keys
+    ADD CONSTRAINT fk_rails_149452d765 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
 
 
 --
@@ -2030,11 +2365,27 @@ ALTER TABLE ONLY public.solid_queue_blocked_executions
 
 
 --
+-- Name: inventory_movements fk_rails_5a348afa95; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT fk_rails_5a348afa95 FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
+
+
+--
 -- Name: catalog_products fk_rails_603098440a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.catalog_products
     ADD CONSTRAINT fk_rails_603098440a FOREIGN KEY (stock_unit_id) REFERENCES public.catalog_units(id);
+
+
+--
+-- Name: inventory_movements fk_rails_64b9a559ef; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_movements
+    ADD CONSTRAINT fk_rails_64b9a559ef FOREIGN KEY (actor_user_id) REFERENCES public.identity_users(id);
 
 
 --
@@ -2094,6 +2445,14 @@ ALTER TABLE ONLY public.identity_memberships
 
 
 --
+-- Name: idempotency_keys fk_rails_96c4cbd0a9; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.idempotency_keys
+    ADD CONSTRAINT fk_rails_96c4cbd0a9 FOREIGN KEY (user_id) REFERENCES public.identity_users(id);
+
+
+--
 -- Name: identity_invitations fk_rails_9cea4cebf4; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2107,6 +2466,14 @@ ALTER TABLE ONLY public.identity_invitations
 
 ALTER TABLE ONLY public.solid_queue_claimed_executions
     ADD CONSTRAINT fk_rails_9cfe4d4944 FOREIGN KEY (job_id) REFERENCES public.solid_queue_jobs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_balances fk_rails_b2e5fe6c5d; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_balances
+    ADD CONSTRAINT fk_rails_b2e5fe6c5d FOREIGN KEY (organization_id) REFERENCES public.identity_organizations(id);
 
 
 --
@@ -2236,6 +2603,19 @@ CREATE POLICY catalog_units_tenant_isolation ON public.catalog_units USING ((org
 
 
 --
+-- Name: idempotency_keys; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.idempotency_keys ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: idempotency_keys idempotency_keys_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY idempotency_keys_tenant_isolation ON public.idempotency_keys USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
 -- Name: identity_invitations; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -2246,6 +2626,32 @@ ALTER TABLE public.identity_invitations ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY identity_invitations_tenant_isolation ON public.identity_invitations USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: inventory_balances; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_balances ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: inventory_balances inventory_balances_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY inventory_balances_tenant_isolation ON public.inventory_balances USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
+
+
+--
+-- Name: inventory_movements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_movements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: inventory_movements inventory_movements_tenant_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY inventory_movements_tenant_isolation ON public.inventory_movements USING ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint)) WITH CHECK ((organization_id = (NULLIF(current_setting('app.organization_id'::text, true), ''::text))::bigint));
 
 
 --
@@ -2268,6 +2674,10 @@ CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehous
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926120300'),
+('20260926120200'),
+('20260926120100'),
+('20260926120000'),
 ('20260926110000'),
 ('20260926100100'),
 ('20260926100000'),
