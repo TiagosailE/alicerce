@@ -13,12 +13,15 @@ RSpec.describe "Purchasing constraints" do
     actor
   end
 
-  def insert_order(org: organization, supplier:, number: 1, status: "draft", installments: 1, total_cents: 0)
+  # An order that is or was approved carries the stamp of its approval; stamped: false
+  # leaves it out, to see what the database says about that.
+  def insert_order(org: organization, supplier:, number: 1, status: "draft", installments: 1, total_cents: 0, stamped: true)
+    approved_at = stamped && %w[draft cancelled].exclude?(status) ? "now()" : "NULL"
     connection.transaction(requires_new: true) do
       connection.execute(<<~SQL)
         INSERT INTO purchasing_orders (organization_id, number, supplier_id, supplier_name, supplier_document_type, supplier_document_number,
-                                       status, installments, total_cents, created_by_user_id, created_at, updated_at)
-        VALUES (#{org.id}, #{number}, #{supplier.id}, 'Fornecedor', 'cnpj', 'x', '#{status}', #{installments}, #{total_cents}, #{actor.id}, now(), now())
+                                       status, installments, total_cents, approved_at, created_by_user_id, created_at, updated_at)
+        VALUES (#{org.id}, #{number}, #{supplier.id}, 'Fornecedor', 'cnpj', 'x', '#{status}', #{installments}, #{total_cents}, #{approved_at}, #{actor.id}, now(), now())
       SQL
     end
   end
@@ -64,6 +67,14 @@ RSpec.describe "Purchasing constraints" do
       expect { insert_order(supplier:, status: "shipped", number: 2) }.to raise_error(ActiveRecord::StatementInvalid, /purchasing_orders_status_valid/)
       expect { insert_order(supplier:, installments: 25, number: 3) }.to raise_error(ActiveRecord::StatementInvalid, /purchasing_orders_installments_range/)
       expect { insert_order(supplier:, total_cents: 10**15 + 1, number: 4) }.to raise_error(ActiveRecord::StatementInvalid, /purchasing_orders_total_range/)
+    end
+
+    it "carries the stamp of its approval once it is approved, partly or wholly received (nothing else can read the day it was approved)" do
+      %w[approved partially_received received].each_with_index do |status, index|
+        expect { insert_order(supplier:, status:, number: 20 + index, stamped: false) }
+          .to raise_error(ActiveRecord::StatementInvalid, /purchasing_orders_approval_stamped/)
+      end
+      expect { insert_order(supplier:, status: "cancelled", number: 30) }.not_to raise_error
     end
 
     it "hides another organization's order and refuses to insert one for it (row level security)" do
@@ -177,7 +188,7 @@ RSpec.describe "Purchasing constraints" do
 
     describe "freezing (the lines of an order that is not a draft)" do
       def order_status!(id, status)
-        connection.execute("UPDATE purchasing_orders SET status = '#{status}' WHERE id = #{id}")
+        connection.execute("UPDATE purchasing_orders SET status = '#{status}', approved_at = now() WHERE id = #{id}")
       end
 
       let(:line_id) do

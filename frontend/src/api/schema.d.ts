@@ -1113,7 +1113,7 @@ export interface components {
             received_on: string;
             /** @description Free text typed from the supplier's paper invoice. */
             supplier_invoice_number?: string;
-            /** @description One entry per order line, at most once each. */
+            /** @description One entry per order line, at most once each. More than 50 is a validation_failed (too_many): an order with more open lines is received in more than one receipt. */
             lines: components["schemas"]["ReceiptLineInput"][];
         };
         ReceiptLineInput: {

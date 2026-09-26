@@ -19,13 +19,17 @@ class AddReceiptsToInventoryMovements < ActiveRecord::Migration[8.1]
     add_check_constraint :inventory_movements, "receipt_line_id IS NULL OR kind = 'receipt'",
       name: "inventory_movements_only_receipts_have_a_line", validate: false
 
+    # The line's own product and warehouse: the movement is one balance's, and the
+    # line it points at must be that balance's too. A null receipt_line_id skips
+    # the check (MATCH SIMPLE), which is every movement that is not a receipt.
     add_foreign_key :inventory_movements, :purchasing_receipt_lines,
-      column: [ :organization_id, :receipt_line_id ], primary_key: [ :organization_id, :id ],
-      name: "fk_inventory_movements_receipt_line_same_organization", validate: false
+      column: [ :organization_id, :receipt_line_id, :product_id, :warehouse_id ],
+      primary_key: [ :organization_id, :id, :product_id, :warehouse_id ],
+      name: "fk_inventory_movements_receipt_line_same_balance", validate: false
   end
 
   def down
-    remove_foreign_key :inventory_movements, name: "fk_inventory_movements_receipt_line_same_organization"
+    remove_foreign_key :inventory_movements, name: "fk_inventory_movements_receipt_line_same_balance"
     remove_check_constraint :inventory_movements, name: "inventory_movements_only_receipts_have_a_line"
     remove_check_constraint :inventory_movements, name: "inventory_movements_receipt_shape"
     remove_check_constraint :inventory_movements, name: "inventory_movements_kind_valid"

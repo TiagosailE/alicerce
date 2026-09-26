@@ -27,6 +27,17 @@ RSpec.describe Money do
       end
     end
 
+    it "never makes a zero part when the parts are capped at the cents to split, as a payable's installments are" do
+      [ 1, 2, 3, 5, 24, 25, 382_201, 10**15 ].each do |total|
+        (1..24).each do |asked|
+          allocated = described_class.allocate(total, [ asked, total ].min)
+
+          expect(allocated.min).to be >= 1
+          expect(allocated.sum).to eq(total)
+        end
+      end
+    end
+
     it "refuses what cannot be split" do
       expect { described_class.allocate(-1, 3) }.to raise_error(ArgumentError)
       expect { described_class.allocate(100, 0) }.to raise_error(ArgumentError)

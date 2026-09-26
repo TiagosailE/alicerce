@@ -137,6 +137,20 @@ RSpec.describe Purchasing::ReceiveGoods do
       expect(receive_goods(pennies, [ item(pennies.lines.sole, "1") ]).value.title.installments.map(&:amount_cents)).to eq([ 1, 1 ])
     end
 
+    it "leaves the last cost alone when a line's cost rounds to zero, as it does for a free one" do
+      pallets = orderable_product(organization, sku: "PAL-001", purchase_unit_code: "FD", factor: "3000000")
+      costly = approved_order!(organization:, supplier:, actor:, lines: [ line_input(pallets, quantity: "1", unit_price_cents: 10_000_000) ])
+      receive_goods(costly, [ item(costly.lines.sole, "1") ])
+      expect(balance_of(pallets).last_unit_cost).to eq(BigDecimal("3.333333"))
+
+      penny = approved_order!(organization:, supplier:, actor:, lines: [ line_input(pallets, quantity: "1", unit_price_cents: 1) ])
+      result = receive_goods(penny, [ item(penny.lines.sole, "1") ])
+
+      expect(result.value.lines.sole).to have_attributes(stock_quantity: BigDecimal("3000000"), net_cents: 1)
+      expect(balance_of(pallets)).to have_attributes(on_hand: BigDecimal("6000000"), value_cents: 10_000_001, last_unit_cost: BigDecimal("3.333333"))
+      expect_ledger_to_add_up(pallets)
+    end
+
     it "opens no title for a receipt worth nothing, and a free line leaves the last cost alone" do
       cheap = approved_order!(organization:, supplier:, actor:, lines: [ line_input(cimento, quantity: "10", unit_price_cents: 1) ])
       line = cheap.lines.sole
@@ -169,6 +183,11 @@ RSpec.describe Purchasing::ReceiveGoods do
       expect(balance_of(cimento)).to have_attributes(on_hand: BigDecimal("15"), value_cents: 47_500, last_unit_cost: BigDecimal("3500"))
       expect(two.reload.status).to eq("received")
       expect_ledger_to_add_up(cimento)
+      result.value.lines.each do |receipt_line|
+        expect(receipt_line.movement).to have_attributes(kind: "receipt", product_id: receipt_line.product_id, warehouse_id: warehouse.id,
+          quantity: receipt_line.stock_quantity, value_cents: receipt_line.net_cents)
+        expect(receipt_line.warehouse_id).to eq(warehouse.id)
+      end
     end
 
     it "keeps the order partially received while any line has something left" do
@@ -191,6 +210,33 @@ RSpec.describe Purchasing::ReceiveGoods do
       nothing_was_written
       expect(order.reload.status).to eq("approved")
       expect(receive_goods(order, [ item(line, "200") ]).value.number).to eq(1)
+    end
+
+    it "more lines than a receipt takes, so it never holds the receipt counter for long" do
+      many = approved_order!(organization:, supplier:, actor:, lines: Array.new(Purchasing::Receipt::MAX_LINES + 1) { line_input(cimento, quantity: "1") })
+
+      result = receive_goods(many, many.lines.map { |line| item(line, "1") })
+
+      expect(result.details[:fields]).to eq("lines" => [ "too_many" ])
+      nothing_was_written
+    end
+
+    it "stock that two lines of one product would together not fit in a balance, though each fits alone" do
+      big = approved_order!(organization:, supplier:, actor:, lines: [ line_input(cimento, quantity: "600000000000", unit_price_cents: 1), line_input(cimento, quantity: "600000000000", unit_price_cents: 1) ])
+
+      result = receive_goods(big, big.lines.map { |line| item(line, "600000000000") })
+
+      expect(result.details[:fields]).to eq("lines.1.quantity" => [ "too_large" ])
+      nothing_was_written
+    end
+
+    it "a cost per unit that would not fit the last cost column" do
+      dear = approved_order!(organization:, supplier:, actor:, lines: [ line_input(cimento, quantity: "0.001", unit_price_cents: 10**15) ])
+
+      result = receive_goods(dear, [ item(dear.lines.sole, "0.001") ])
+
+      expect(result.details[:fields]).to eq("lines.0.quantity" => [ "too_large" ])
+      nothing_was_written
     end
 
     it "the same order line twice in one request" do

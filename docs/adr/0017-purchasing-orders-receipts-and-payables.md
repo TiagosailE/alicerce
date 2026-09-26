@@ -286,6 +286,16 @@ free-text `note` and `supplier_invoice_number` are filtered from request logs.
   a receipt that succeeded replays it even if the warehouse was deactivated since.
 - Capabilities that read purchasing, the ledger and stock value are allow-lists of
   roles, not "everyone but sales", so a future role gets none of them by default.
+- A receipt takes at most 50 lines (an order takes 200). It writes about a dozen rows
+  per line while holding the receipt counter's lock, so a larger order is received in
+  more than one receipt, and the error says so (`too_many`).
+- The database ties what the application already checks. A receipt line carries its
+  receipt's warehouse and a ledger movement can only point at a receipt line of its own
+  product and warehouse, both through composite keys; a payable is refused unless it is
+  worth what its receipt cost; and an order that is or was approved carries the stamp of
+  its approval, which receiving reads to refuse a date before it.
+- A line whose cost per stock unit rounds to zero leaves the last cost alone, like a
+  free line: a cost of zero would value the next issue at nothing.
 
 ## Consequences
 

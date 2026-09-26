@@ -38,7 +38,7 @@ module Purchasing
       return "too_long" if invoice.length > Purchasing::Receipt::SUPPLIER_INVOICE_MAX_LENGTH
       return "invalid" unless invoice.match?(Purchasing::Receipt::SUPPLIER_INVOICE_FORMAT)
 
-      "invalid" if invoice.match?(/\d{#{Purchasing::Receipt::SUPPLIER_INVOICE_MAX_DIGITS + 1},}/)
+      "invalid" if invoice.scan(/\d+/).any? { |digits| digits.length > Purchasing::Receipt::SUPPLIER_INVOICE_MAX_DIGITS }
     end
 
     def parse_lines(inputs, fields)
@@ -46,7 +46,7 @@ module Purchasing
         fields["lines"] = [ "blank" ]
         return []
       end
-      if inputs.size > Purchasing::Order::MAX_LINES
+      if inputs.size > Purchasing::Receipt::MAX_LINES
         fields["lines"] = [ "too_many" ]
         return []
       end

@@ -7,6 +7,9 @@ RSpec.describe Purchasing::Order do
 
   it_behaves_like "a state machine" do
     def record_in(status) = create(:purchase_order, organization:, status:)
+
+    # An approval carries its stamp, which the database requires (the command sets it).
+    def transition_attributes(_from, to) = to == "approved" ? { approved_at: Time.current } : {}
   end
 
   it "has the transition table of ADR 0017" do
