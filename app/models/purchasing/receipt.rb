@@ -9,6 +9,10 @@ module Purchasing
     include TenantScoped
 
     SUPPLIER_INVOICE_MAX_LENGTH = 60
+    SUPPLIER_INVOICE_FORMAT = %r{\A[[:alnum:]][[:alnum:] ./-]*\z}
+    # An invoice number is a few digits plus a series; the 44 digits of an NF-e
+    # access key are not one.
+    SUPPLIER_INVOICE_MAX_DIGITS = 15
 
     belongs_to :order, class_name: "Purchasing::Order"
     belongs_to :warehouse, class_name: "Inventory::Warehouse"

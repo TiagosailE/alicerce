@@ -14,6 +14,9 @@ module DatabaseRoles
   # role only once a database exists), so the migration's own revoke and
   # grants are best-effort and this is what actually enforces them.
   APPEND_ONLY_TABLES = %w[audit_events inventory_movements purchasing_receipts purchasing_receipt_lines].freeze
+  # Tables whose rows the app updates but never deletes (a title is closed by its
+  # status): only DELETE is revoked, unlike the append-only tables above.
+  NO_DELETE_TABLES = %w[finance_titles finance_installments].freeze
   OWNER_ONLY_FUNCTIONS = {
     "audit_purge" => "bigint, timestamptz",
     "audit_redact" => "bigint, varchar, bigint",
@@ -54,6 +57,7 @@ module DatabaseRoles
     SQL
 
     revoke_append_only_privileges!(connection)
+    revoke_delete_privileges!(connection)
     grant_owner_only_function_privileges!(connection)
     revoke_owner_execute_only_privileges!(connection)
   end
@@ -63,6 +67,14 @@ module DatabaseRoles
       next unless connection.table_exists?(table)
 
       connection.execute("REVOKE UPDATE, DELETE ON #{table} FROM #{APP_ROLE}")
+    end
+  end
+
+  def revoke_delete_privileges!(connection)
+    NO_DELETE_TABLES.each do |table|
+      next unless connection.table_exists?(table)
+
+      connection.execute("REVOKE DELETE ON #{table} FROM #{APP_ROLE}")
     end
   end
 

@@ -69,6 +69,74 @@ $$;
 
 
 --
+-- Name: finance_installments_freeze(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_installments_freeze() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (NEW.organization_id, NEW.title_id, NEW.number, NEW.amount_cents)
+     IS DISTINCT FROM (OLD.organization_id, OLD.title_id, OLD.number, OLD.amount_cents) THEN
+    RAISE EXCEPTION 'an installment''s title, number and amount cannot be changed';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: finance_title_matches_installments(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_title_matches_installments() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  target_id bigint;
+  expected bigint;
+  actual bigint;
+BEGIN
+  IF TG_TABLE_NAME = 'finance_titles' THEN
+    target_id := NEW.id;
+  ELSIF TG_OP = 'DELETE' THEN
+    target_id := OLD.title_id;
+  ELSE
+    target_id := NEW.title_id;
+  END IF;
+
+  SELECT total_cents INTO expected FROM finance_titles WHERE id = target_id;
+  IF expected IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT COALESCE(SUM(amount_cents), 0) INTO actual FROM finance_installments WHERE title_id = target_id;
+  IF actual <> expected THEN
+    RAISE EXCEPTION 'the installments of title % add up to %, not to its total of %', target_id, actual, expected;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+
+
+--
+-- Name: finance_titles_freeze(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_titles_freeze() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF (NEW.organization_id, NEW.kind, NEW.partner_id, NEW.receipt_id, NEW.total_cents, NEW.currency)
+     IS DISTINCT FROM (OLD.organization_id, OLD.kind, OLD.partner_id, OLD.receipt_id, OLD.total_cents, OLD.currency) THEN
+    RAISE EXCEPTION 'a title''s kind, partner, receipt and total cannot be changed';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
 -- Name: inventory_movement_redact_note(bigint, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2968,6 +3036,34 @@ CREATE TRIGGER audit_events_append_only BEFORE DELETE OR UPDATE ON public.audit_
 
 
 --
+-- Name: finance_installments finance_installments_freeze; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER finance_installments_freeze BEFORE UPDATE ON public.finance_installments FOR EACH ROW EXECUTE FUNCTION public.finance_installments_freeze();
+
+
+--
+-- Name: finance_installments finance_installments_total_matches_title; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER finance_installments_total_matches_title AFTER INSERT OR DELETE OR UPDATE OF amount_cents, title_id ON public.finance_installments DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.finance_title_matches_installments();
+
+
+--
+-- Name: finance_titles finance_titles_freeze; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER finance_titles_freeze BEFORE UPDATE ON public.finance_titles FOR EACH ROW EXECUTE FUNCTION public.finance_titles_freeze();
+
+
+--
+-- Name: finance_titles finance_titles_total_matches_installments; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER finance_titles_total_matches_installments AFTER INSERT ON public.finance_titles DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.finance_title_matches_installments();
+
+
+--
 -- Name: inventory_movements inventory_movements_append_only; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -3761,6 +3857,7 @@ CREATE POLICY purchasing_receipts_tenant_isolation ON public.purchasing_receipts
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926170000'),
 ('20260926160400'),
 ('20260926160300'),
 ('20260926160200'),

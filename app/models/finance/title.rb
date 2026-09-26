@@ -6,9 +6,12 @@ module Finance
   # never rewrites it (ADR 0015).
   class Title < ApplicationRecord
     include TenantScoped
+    include HasStateMachine
 
     KINDS = %w[payable receivable].freeze
-    STATUSES = %w[open cancelled].freeze
+    # Slice 6 adds the paid states. A cancelled title is final; nothing deletes one.
+    TRANSITIONS = { "open" => %w[cancelled], "cancelled" => [] }.freeze
+    STATUSES = TRANSITIONS.keys.freeze
 
     belongs_to :partner, class_name: "Catalog::Partner"
     belongs_to :receipt, class_name: "Purchasing::Receipt", optional: true

@@ -43,7 +43,6 @@ module Purchasing
 
     def call
       @input, fields = Purchasing::ReceiptInput.call(**@inputs, time_zone: @organization.time_zone)
-      fields["warehouse_id"] = [ "inactive" ] unless @warehouse.active?
       fields["idempotency_key"] = [ "invalid" ] unless Idempotency.valid_key?(@idempotency_key)
       return Result.failure(:validation_failed, fields:) if fields.any?
 
@@ -83,10 +82,13 @@ module Purchasing
         post(claim, order, lines, balances, entries)
       end
 
-      # What can only be known from the locked rows: each line is this order's,
-      # and the day is not before the order was approved.
+      # What can only be known from the locked rows, so only after the key is
+      # claimed (a retry of a request that succeeded must replay, not be refused
+      # for what changed since): each line is this order's, the warehouse is in
+      # use, and the day is not before the order was approved.
       def row_errors(order, lines)
         fields = {}
+        fields["warehouse_id"] = [ "inactive" ] unless @warehouse.active?
         @input.items.each do |item|
           (fields["lines.#{item.index}.order_line_id"] ||= []) << "not_found" unless lines.key?(item.order_line_id)
         end

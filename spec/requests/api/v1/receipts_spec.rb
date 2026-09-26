@@ -241,19 +241,57 @@ RSpec.describe "Receipts API" do
       expect(Purchasing::Receipt.count).to eq(0)
     end
 
-    it "answers 429 past the per-user ceiling on writes" do
+    it "never lets someone who may not receive spend the organization's allowance, however many accounts they use" do
       owner = create_membership(organization, role: "owner")
       order, warehouse = approved_cement_order
-      csrf_token = sign_in_and_csrf(owner)
-      bad = receipt_params(order, warehouse, overrides: { lines: [] })
+      attackers = Array.new(4) { create_membership(organization, role: "sales") }
+      params = receipt_params(order, warehouse)
+      statuses = []
 
-      statuses = 62.times.map do
-        post_receipt(order, bad, csrf_token)
-        response.status
+      attackers.each do |attacker|
+        csrf_token = sign_in_and_csrf(attacker)
+        55.times do
+          post_receipt(order, params, csrf_token)
+          statuses << response.status
+        end
       end
 
-      expect(statuses.first(60)).to all(eq(422))
-      expect(statuses.last).to eq(429)
+      # 4 x 55 = 220 forbidden requests: past the organization's 200 in ten minutes, had they counted
+      expect(statuses).to all(eq(403))
+      csrf_token = sign_in_and_csrf(owner)
+      post_receipt(order, params, csrf_token)
+      expect(response).to have_http_status(:created)
+    end
+
+    it "has a tighter ceiling for receipts than for the other writes: 20 in ten minutes for the organization" do
+      accounts = Array.new(2) { create_membership(organization, role: "purchasing") }
+      order, warehouse = approved_cement_order
+      bad = receipt_params(order, warehouse, overrides: { lines: [] })
+      statuses = []
+
+      accounts.each do |account|
+        csrf_token = sign_in_and_csrf(account)
+        11.times do
+          post_receipt(order, bad, csrf_token)
+          statuses << response.status
+        end
+      end
+
+      expect(statuses.first(20)).to all(eq(422))
+      expect(statuses.last(2)).to all(eq(429))
+      assert_response_schema_confirm(429)
+    end
+
+    it "answers a role without access the same 403 for an order that exists and one that does not" do
+      sales = create_membership(organization, role: "sales")
+      order, warehouse = approved_cement_order
+      csrf_token = sign_in_and_csrf(sales)
+
+      post_receipt(order, receipt_params(order, warehouse), csrf_token)
+      existing = response.status
+      post "/api/v1/purchase_orders/0/receipts", params: receipt_params(order, warehouse), as: :json, headers: headers(csrf_token)
+
+      expect([ existing, response.status ]).to eq([ 403, 403 ])
     end
   end
 
@@ -309,6 +347,19 @@ RSpec.describe "Receipts API" do
   end
 
   describe "GET /api/v1/receipts/:id" do
+    it "answers a role without access the same 403 for a receipt that exists and one that does not" do
+      order, warehouse = approved_cement_order
+      receipt = posted_receipt(order, warehouse)
+      sales = create_membership(organization, role: "sales")
+      sign_in_via_api(email: sales.email, password:)
+
+      get "/api/v1/receipts/#{receipt.id}"
+      existing = response.status
+      get "/api/v1/receipts/0"
+
+      expect([ existing, response.status ]).to eq([ 403, 403 ])
+    end
+
     it "answers not_found for another organization's receipt" do
       user = create_membership(organization, role: "owner")
       other_order, other_warehouse = approved_cement_order(other_organization)

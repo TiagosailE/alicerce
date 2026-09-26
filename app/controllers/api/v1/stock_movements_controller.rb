@@ -9,8 +9,9 @@ module Api
           policy_scope(Inventory::Movement), **pagination_params,
           warehouse_id: scalar_param(:warehouse_id), product_id: scalar_param(:product_id), reason: scalar_param(:reason)
         )
+        receipt_visible = Identity::Capabilities.view_purchasing?(Current.user&.membership_in(Current.organization))
         render json: {
-          data: query.results.map { |movement| Inventory::MovementSerializer.new(movement).as_json },
+          data: query.results.map { |movement| Inventory::MovementSerializer.new(movement, receipt_visible:).as_json },
           meta: query.meta
         }
       end

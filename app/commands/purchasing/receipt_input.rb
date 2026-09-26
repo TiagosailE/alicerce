@@ -21,13 +21,24 @@ module Purchasing
       items = parse_lines(lines, fields)
       date = parse_date(received_on, time_zone, fields)
       invoice = supplier_invoice_number.presence
-      if !invoice.nil? && !invoice.is_a?(String)
-        fields["supplier_invoice_number"] = [ "invalid" ]
-      elsif invoice && invoice.length > Purchasing::Receipt::SUPPLIER_INVOICE_MAX_LENGTH
-        fields["supplier_invoice_number"] = [ "too_long" ]
-      end
+      kind = invoice_error(invoice)
+      fields["supplier_invoice_number"] = [ kind ] if kind
 
       [ Parsed.new(items:, received_on: date, supplier_invoice_number: invoice), fields ]
+    end
+
+    # The number printed on the supplier's invoice: short, letters, digits and
+    # the usual separators. A long run of digits is refused because it is not an
+    # invoice number: the 44 digits of an NF-e access key embed the issuer's CNPJ
+    # (a rural producer's CPF, sometimes), which this field must not carry in the
+    # clear (ADR 0012).
+    def invoice_error(invoice)
+      return if invoice.nil?
+      return "invalid" unless invoice.is_a?(String)
+      return "too_long" if invoice.length > Purchasing::Receipt::SUPPLIER_INVOICE_MAX_LENGTH
+      return "invalid" unless invoice.match?(Purchasing::Receipt::SUPPLIER_INVOICE_FORMAT)
+
+      "invalid" if invoice.match?(/\d{#{Purchasing::Receipt::SUPPLIER_INVOICE_MAX_DIGITS + 1},}/)
     end
 
     def parse_lines(inputs, fields)

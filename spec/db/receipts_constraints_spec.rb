@@ -187,6 +187,57 @@ RSpec.describe "Receipts, titles and receipt movements: constraints" do
     end
   end
 
+  describe "the installments of a title" do
+    def within_immediate_constraints
+      connection.transaction(requires_new: true) do
+        connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        yield
+      end
+    end
+
+    it "must add up to the title's total, checked when the transaction commits (a title with no installments included)" do
+      expect { within_immediate_constraints { insert_installment(number: 9, amount: 1) } }
+        .to raise_error(ActiveRecord::StatementInvalid, /add up to \d+, not to its total of/)
+      expect { within_immediate_constraints { insert_title(kind: "receivable", total: 500) } }
+        .to raise_error(ActiveRecord::StatementInvalid, /add up to 0, not to its total of 500/)
+    end
+
+    it "lets a title and its installments be written in either order, so long as they agree at commit" do
+      expect do
+        connection.transaction(requires_new: true) do
+          insert_title(kind: "receivable", total: 300)
+          title_id = connection.select_value("SELECT max(id) FROM finance_titles").to_i
+          insert_installment(title_id:, number: 1, amount: 100)
+          insert_installment(title_id:, number: 2, amount: 200)
+          connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+        end
+      end.not_to raise_error
+    end
+
+    it "keeps what a title and an installment were created with, and lets only the settled amount and the status move" do
+      title_id = receipt.title.id
+      installment_id = receipt.title.installments.first.id
+
+      expect { connection.transaction(requires_new: true) { connection.execute("UPDATE finance_titles SET total_cents = 1 WHERE id = #{title_id}") } }
+        .to raise_error(ActiveRecord::StatementInvalid, /a title's kind, partner, receipt and total cannot be changed/)
+      expect { connection.transaction(requires_new: true) { connection.execute("UPDATE finance_titles SET partner_id = partner_id + 1 WHERE id = #{title_id}") } }
+        .to raise_error(ActiveRecord::StatementInvalid)
+      expect { connection.transaction(requires_new: true) { connection.execute("UPDATE finance_installments SET amount_cents = 1 WHERE id = #{installment_id}") } }
+        .to raise_error(ActiveRecord::StatementInvalid, /cannot be changed/)
+      expect { connection.transaction(requires_new: true) { connection.execute("UPDATE finance_installments SET settled_cents = 1 WHERE id = #{installment_id}") } }
+        .not_to raise_error
+    end
+
+    it "cannot be deleted by the app role: a title is closed by its status" do
+      privileges = %w[SELECT INSERT UPDATE DELETE].to_h do |privilege|
+        [ privilege, connection.select_value("SELECT has_table_privilege(current_user, 'finance_titles', '#{privilege}')") ]
+      end
+
+      expect(privileges).to eq("SELECT" => true, "INSERT" => true, "UPDATE" => true, "DELETE" => false)
+      expect(connection.select_value("SELECT has_table_privilege(current_user, 'finance_installments', 'DELETE')")).to be(false)
+    end
+  end
+
   describe "inventory_movements of a receipt" do
     let(:line_id) { receipt.lines.sole.id }
 
