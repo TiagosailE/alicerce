@@ -94,6 +94,8 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
 
   /units:
     get:
@@ -113,6 +115,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "422":
           $ref: "#/components/responses/Error"
     post:
       operationId: createUnit
@@ -201,6 +205,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "422":
           $ref: "#/components/responses/Error"
     post:
       operationId: createCategory
@@ -300,6 +306,8 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
     post:
       operationId: createProduct
       summary: Create a product
@@ -387,6 +395,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "422":
           $ref: "#/components/responses/Error"
     post:
       operationId: createWarehouse
@@ -489,6 +499,8 @@ paths:
           $ref: "#/components/responses/Error"
         "403":
           $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
     post:
       operationId: createPartner
       summary: Create a partner
@@ -576,6 +588,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "422":
           $ref: "#/components/responses/Error"
     post:
       operationId: createInvitation
@@ -665,6 +679,8 @@ paths:
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "422":
           $ref: "#/components/responses/Error"
 
   /memberships/{id}:

@@ -1,6 +1,10 @@
 Rails.application.config.filter_parameters += [
   :passw, :email, :secret, :token, :_key, :crypt, :salt, :certificate, :otp, :ssn, :cvv, :cvc,
-  :document_number, :phone, :name
+  :document_number, :phone, :name,
+  # Partner search (?q=Marcos+Pereira) carries a person's name. Anchored
+  # because a bare :q would match every key that merely contains the letter,
+  # like request or quantity.
+  /\Aq\z/
 ]
 
 # filter_parameters only redacts the controller's "Parameters: {...}" log

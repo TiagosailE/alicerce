@@ -5,7 +5,7 @@ module Api
 
       def index
         authorize(Audit::Event)
-        query = Audit::EventsQuery.new(policy_scope(Audit::Event), page: params[:page], per_page: params[:per_page])
+        query = Audit::EventsQuery.new(policy_scope(Audit::Event), **pagination_params)
         render json: { data: query.results.map { |event| Audit::EventSerializer.new(event).as_json }, meta: query.meta }
       end
     end

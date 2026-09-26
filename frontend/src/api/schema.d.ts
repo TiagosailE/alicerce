@@ -1009,6 +1009,7 @@ export interface operations {
             200: components["responses"]["AuditEventListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     listUnits: {
@@ -1026,6 +1027,7 @@ export interface operations {
             200: components["responses"]["UnitListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     createUnit: {
@@ -1107,6 +1109,7 @@ export interface operations {
             200: components["responses"]["CategoryListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     createCategory: {
@@ -1192,6 +1195,7 @@ export interface operations {
             200: components["responses"]["ProductListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     createProduct: {
@@ -1273,6 +1277,7 @@ export interface operations {
             200: components["responses"]["WarehouseListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     createWarehouse: {
@@ -1359,6 +1364,7 @@ export interface operations {
             200: components["responses"]["PartnerListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     createPartner: {
@@ -1440,6 +1446,7 @@ export interface operations {
             200: components["responses"]["PendingInvitationListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     createInvitation: {
@@ -1527,6 +1534,7 @@ export interface operations {
             200: components["responses"]["MemberListResponse"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
         };
     };
     destroyMembership: {

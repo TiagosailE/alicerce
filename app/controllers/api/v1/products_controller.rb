@@ -8,8 +8,8 @@ module Api
         authorize(Catalog::Product)
         query = Catalog::ProductsQuery.new(
           policy_scope(Catalog::Product),
-          page: params[:page], per_page: params[:per_page],
-          category_id: params[:category_id], active: params[:active], q: params[:q]
+          **pagination_params,
+          category_id: scalar_param(:category_id), active: scalar_param(:active), q: scalar_param(:q)
         )
         render json: { data: query.results.map { |product| Catalog::ProductSerializer.new(product).as_json }, meta: query.meta }
       end

@@ -6,7 +6,7 @@ module Api
 
       def index
         authorize(Catalog::Category)
-        query = Catalog::CategoriesQuery.new(policy_scope(Catalog::Category), page: params[:page], per_page: params[:per_page])
+        query = Catalog::CategoriesQuery.new(policy_scope(Catalog::Category), **pagination_params)
         render json: { data: query.results.map { |category| Catalog::CategorySerializer.new(category).as_json }, meta: query.meta }
       end
 

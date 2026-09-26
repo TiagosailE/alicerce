@@ -8,8 +8,8 @@ module Api
         authorize(Catalog::Partner)
         query = Catalog::PartnersQuery.new(
           policy_scope(Catalog::Partner),
-          page: params[:page], per_page: params[:per_page],
-          customer: params[:customer], supplier: params[:supplier], active: params[:active], q: params[:q]
+          **pagination_params,
+          customer: scalar_param(:customer), supplier: scalar_param(:supplier), active: scalar_param(:active), q: scalar_param(:q)
         )
         render json: { data: query.results.map { |partner| Catalog::PartnerSerializer.new(partner).as_json }, meta: query.meta }
       end
