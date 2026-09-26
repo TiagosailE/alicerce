@@ -71,6 +71,7 @@ Each item below has a named place where it would plug in; none of them gets code
 | Fiscal documents (NF-e, NFS-e) and tax calculation | Invoicing happens in a single command. A fiscal integration would be a job enqueued inside that command's transaction; jobs live in the same database, so the enqueue commits or rolls back with the invoice. |
 | Real bank integration (CNAB, Pix, Open Finance) | A bank integration would call the same settlement command with its own idempotency key. |
 | Customer returns and returns to suppliers | A return document would reuse the compensating stock movements of invoice cancellation, per line. |
+| Reversing a receipt | A receipt cannot always be taken back at its own cost once later receipts and issues have moved the average (ADR 0017), so a mistaken receipt is corrected by a stock adjustment, the finance slice cancelling its payable while nothing is settled, and a new order; a return document would add a proper reversal. |
 | Matching supplier invoices against receipts | Payables come from received quantities at the order price; a supplier invoice document would sit between receipt and payable. |
 | Multiple currencies | Only BRL is accepted; amounts already carry their currency. |
 | Lots, expiry dates, serial numbers | A lot would extend the balance key `(product, warehouse)`. |
