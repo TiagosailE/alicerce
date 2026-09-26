@@ -540,7 +540,10 @@ paths:
         Sets the stock of a product in a warehouse to the counted quantity and
         records the difference as one ledger movement (ADR 0016). Owner, admin
         and purchasing only (ADR 0008). A count equal to the balance writes no
-        movement and answers 200 with a null movement.
+        movement and answers 200 with a null movement. The reason must agree with
+        the direction: loss, damage, theft and expiry decrease stock; found and
+        opening_balance increase it, and opening_balance only for a balance with
+        no history.
       parameters:
         - $ref: "#/components/parameters/CsrfToken"
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -566,6 +569,8 @@ paths:
         "409":
           $ref: "#/components/responses/Error"
         "422":
+          $ref: "#/components/responses/Error"
+        "429":
           $ref: "#/components/responses/Error"
 
   /partners:
@@ -1572,7 +1577,7 @@ components:
     StockBalance:
       type: object
       additionalProperties: false
-      required: [ id, product, warehouse, on_hand, reserved, available, value_cents, currency, last_unit_cost ]
+      required: [ id, product, warehouse, on_hand, reserved, available, value_cents, currency, last_unit_cost_cents ]
       properties:
         id: { type: integer }
         product:
@@ -1592,14 +1597,20 @@ components:
           description: on_hand minus reserved, computed by the API.
         value_cents:
           type: integer
-          description: The inventory value of on_hand, in cents (ADR 0006).
+          nullable: true
+          description: >
+            The inventory value of on_hand, in cents (ADR 0006). Null for a role
+            that may not see what stock is worth or cost (sales, ADR 0016).
         currency:
           type: string
           enum: [ BRL ]
-        last_unit_cost:
+        last_unit_cost_cents:
           type: string
+          nullable: true
           pattern: '^[0-9]{1,13}\.[0-9]{6}$'
-          description: Cost per stock unit of the latest costed entry, in cents, up to 6 places.
+          description: >
+            Cost per stock unit of the latest costed entry, in cents, always 6
+            places. Null when value_cents is.
 
     StockMovement:
       type: object
@@ -1626,14 +1637,17 @@ components:
           description: Signed, and a negative quantity takes stock out.
         value_cents:
           type: integer
-          description: Signed like quantity.
+          nullable: true
+          description: Signed like quantity. Null for a role that may not see values.
         currency:
           type: string
           enum: [ BRL ]
         on_hand_after:
           type: string
           pattern: '^-?[0-9]{1,12}\.[0-9]{3}$'
-        value_after_cents: { type: integer }
+        value_after_cents:
+          type: integer
+          nullable: true
         actor:
           type: object
           additionalProperties: false
@@ -1686,7 +1700,7 @@ components:
     StockAdjustmentRequest:
       type: object
       additionalProperties: false
-      required: [ product_id, warehouse_id, counted_quantity, reason ]
+      required: [ product_id, warehouse_id, counted_quantity, expected_on_hand, reason ]
       properties:
         product_id: { type: integer }
         warehouse_id: { type: integer }
@@ -1697,18 +1711,28 @@ components:
             The quantity actually counted, in the product's stock unit, at most
             3 places. The API computes the difference from the balance under
             its lock; the client never does.
+        expected_on_hand:
+          type: string
+          pattern: '^-?[0-9]{1,12}(\.[0-9]{1,3})?$'
+          description: >
+            The balance's on_hand as the client last saw it ("0.000" when it
+            had no balance). A count is an observation at a moment: if a sale or
+            a receipt moved the balance since, the count is refused with 409
+            stale, and error details carry current_on_hand (ADR 0016).
         reason:
           $ref: "#/components/schemas/AdjustmentReason"
         note:
           type: string
           maxLength: 500
-        unit_cost:
+        unit_cost_cents:
           type: string
           pattern: '^[0-9]{1,13}(\.[0-9]{1,6})?$'
           description: >
-            Cost per stock unit in cents, at most 6 places, for an increase.
+            Cost per stock unit in cents (a decimal string, since a unit can
+            cost a fraction of a cent), at most 6 places, for an increase.
             Required when the balance has no average or last cost to value it
-            with (unit_cost required); not allowed for a decrease (ADR 0016).
+            with (kind required on unit_cost_cents); not allowed for a
+            decrease (ADR 0016).
 
     PartnerSummary:
       type: object

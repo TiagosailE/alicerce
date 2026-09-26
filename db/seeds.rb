@@ -79,8 +79,9 @@ end
 # stock a second time. unit_cost is in cents per stock unit (ADR 0016).
 def seed_stock(organization, actor:, product:, warehouse:, quantity:, unit_cost:)
   result = Inventory::AdjustStock.call(
-    organization:, actor:, product:, warehouse:, counted_quantity: quantity, reason: "opening_balance", unit_cost:,
-    idempotency_key: "seed-#{organization.id}-#{product.id}-#{warehouse.id}", request_digest: "seed-opening-balance"
+    organization:, actor:, product:, warehouse:, counted_quantity: quantity, expected_on_hand: "0", reason: "opening_balance",
+    unit_cost_cents: unit_cost, idempotency_key: "seed-#{organization.id}-#{product.id}-#{warehouse.id}",
+    request_digest: "seed-opening-balance"
   )
   raise "Seeding stock failed: #{result.error} #{result.details}" unless result.success?
 end

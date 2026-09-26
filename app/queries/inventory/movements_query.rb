@@ -4,7 +4,7 @@ module Inventory
     include Pagination
 
     def results
-      paginated(@scope.includes(:actor_user, :warehouse, product: :stock_unit).order(created_at: :desc, id: :desc))
+      paginated(@scope.includes(:actor_user, :warehouse, product: :stock_unit).order(id: :desc))
     end
 
     private

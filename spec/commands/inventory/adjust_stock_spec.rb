@@ -8,10 +8,16 @@ RSpec.describe Inventory::AdjustStock do
 
   before { set_current_tenant(organization) }
 
-  def adjust(counted, reason: "count", unit_cost: nil, note: nil, key: SecureRandom.uuid, digest: nil, product: self.product, warehouse: self.warehouse)
+  # expected defaults to what the balance holds right now, as a client that
+  # had just looked would send; pass one to model a stale observation.
+  def adjust(counted, reason: "count", unit_cost: nil, note: nil, key: SecureRandom.uuid, digest: nil, expected: nil,
+             product: self.product, warehouse: self.warehouse)
+    current = Inventory::Balance.find_by(product_id: product.id, warehouse_id: warehouse.id)
+    expected ||= current ? current.on_hand.to_s("F") : "0"
     described_class.call(
-      organization:, actor:, product:, warehouse:, counted_quantity: counted, reason:, note:, unit_cost:,
-      idempotency_key: key, request_digest: digest || Idempotency.digest(method: "POST", path: "/stock_adjustments", params: { counted:, reason:, unit_cost:, note: })
+      organization:, actor:, product:, warehouse:, counted_quantity: counted, expected_on_hand: expected, reason:, note:,
+      unit_cost_cents: unit_cost, idempotency_key: key,
+      request_digest: digest || Idempotency.digest(method: "POST", path: "/stock_adjustments", params: { counted:, reason:, unit_cost:, note: })
     )
   end
 
@@ -40,7 +46,7 @@ RSpec.describe Inventory::AdjustStock do
 
       expect(result).not_to be_success
       expect(result.error).to eq(:validation_failed)
-      expect(result.details[:fields]).to eq("unit_cost" => [ "required" ])
+      expect(result.details[:fields]).to eq("unit_cost_cents" => [ "required" ])
       expect(Inventory::Movement.count).to eq(0)
     end
   end
@@ -94,7 +100,7 @@ RSpec.describe Inventory::AdjustStock do
       result = adjust("5", reason: "loss", unit_cost: "50")
 
       expect(result.error).to eq(:validation_failed)
-      expect(result.details[:fields]).to eq("unit_cost" => [ "not_applicable" ])
+      expect(result.details[:fields]).to eq("unit_cost_cents" => [ "not_applicable" ])
       expect(balance.on_hand).to eq(BigDecimal("10"))
     end
 
@@ -137,12 +143,13 @@ RSpec.describe Inventory::AdjustStock do
 
   describe "input" do
     it "answers validation_failed with a kind per field and writes nothing" do
-      result = adjust("1.2345", reason: "whim", unit_cost: "abc", note: "n" * 501, key: "short")
+      result = adjust("1.2345", reason: "whim", unit_cost: "abc", note: "n" * 501, key: "short", expected: "x")
 
       expect(result.error).to eq(:validation_failed)
       expect(result.details[:fields]).to eq(
-        "counted_quantity" => [ "too_many_decimals" ], "unit_cost" => [ "not_a_number" ],
-        "reason" => [ "inclusion" ], "note" => [ "too_long" ], "idempotency_key" => [ "invalid" ]
+        "counted_quantity" => [ "too_many_decimals" ], "expected_on_hand" => [ "not_a_number" ],
+        "unit_cost_cents" => [ "not_a_number" ], "reason" => [ "inclusion" ], "note" => [ "too_long" ],
+        "idempotency_key" => [ "invalid" ]
       )
       expect(Inventory::Balance.count).to eq(0)
       expect(IdempotencyKey.count).to eq(0)
@@ -214,11 +221,160 @@ RSpec.describe Inventory::AdjustStock do
       adjust("10", unit_cost: "84.99", key:, digest:)
 
       result = described_class.call(
-        organization:, actor: other_user, product:, warehouse:, counted_quantity: "10", reason: "count", unit_cost: "84.99",
-        idempotency_key: key, request_digest: digest
+        organization:, actor: other_user, product:, warehouse:, counted_quantity: "10", expected_on_hand: "10", reason: "count",
+        unit_cost_cents: "84.99", idempotency_key: key, request_digest: digest
       )
 
       expect(result.value.status).to eq(200)
+    end
+  end
+
+  describe "a count made against a balance that has moved (stale observation)" do
+    before { adjust("100", reason: "opening_balance", unit_cost: "10") }
+
+    it "refuses the count instead of silently undoing the movement in between" do
+      # The operator saw 100 and counted 98; a sale then took 10 (modelled by a
+      # second count to 90). Applying "98" now would post +8 and undo the sale.
+      adjust("90", reason: "loss")
+
+      result = adjust("98", expected: "100")
+
+      expect(result).not_to be_success
+      expect(result.error).to eq(:stale)
+      expect(result.details[:current_on_hand]).to eq("90.000")
+      expect(balance.on_hand).to eq(BigDecimal("90"))
+      expect(Inventory::Movement.count).to eq(2)
+    end
+
+    it "does not remember the refused attempt, so the operator can count again with the same key" do
+      key = SecureRandom.uuid
+      adjust("90", reason: "loss")
+      expect(adjust("98", expected: "100", key:).error).to eq(:stale)
+
+      retried = adjust("98", expected: "90", key:)
+
+      expect(retried).to be_success
+      expect(balance.on_hand).to eq(BigDecimal("98"))
+    end
+
+    it "expects zero from a client that saw no balance" do
+      fresh = create(:product, organization:)
+
+      expect(adjust("5", unit_cost: "1", expected: "3", product: fresh).error).to eq(:stale)
+      expect(adjust("5", unit_cost: "1", expected: "0", product: fresh)).to be_success
+    end
+  end
+
+  describe "the reason must agree with the direction" do
+    before { adjust("10", reason: "opening_balance", unit_cost: "10") }
+
+    %w[loss damage theft expiry].each do |reason|
+      it "refuses #{reason} on an increase" do
+        result = adjust("12", reason:, unit_cost: "10")
+
+        expect(result.details[:fields]).to eq("reason" => [ "incompatible_with_direction" ])
+        expect(balance.on_hand).to eq(BigDecimal("10"))
+      end
+
+      it "accepts #{reason} on a decrease" do
+        expect(adjust("8", reason:)).to be_success
+      end
+    end
+
+    %w[found opening_balance].each do |reason|
+      it "refuses #{reason} on a decrease" do
+        expect(adjust("8", reason:).details[:fields]).to eq("reason" => [ "incompatible_with_direction" ])
+      end
+    end
+
+    it "accepts found on an increase" do
+      expect(adjust("12", reason: "found")).to be_success
+    end
+
+    %w[count other].each do |reason|
+      it "lets #{reason} go either way" do
+        expect(adjust("12", reason:)).to be_success
+        expect(adjust("7", reason:)).to be_success
+      end
+    end
+
+    it "allows an opening balance only for a balance that has no history" do
+      result = adjust("15", reason: "opening_balance", unit_cost: "10")
+
+      expect(result.details[:fields]).to eq("reason" => [ "balance_has_history" ])
+    end
+
+    it "does not judge the reason of a count that matches the balance, since nothing moves" do
+      expect(adjust("10", reason: "theft")).to be_success
+    end
+  end
+
+  describe "values that do not fit" do
+    it "refuses a value past the cap on the unit cost that caused it, never a database error" do
+      result = adjust("999999999999", reason: "opening_balance", unit_cost: "9999999999999")
+
+      expect(result.error).to eq(:validation_failed)
+      expect(result.details[:fields]).to eq("unit_cost_cents" => [ "too_large" ])
+      expect(Inventory::Movement.count).to eq(0)
+    end
+
+    it "refuses a value that only overflows by accumulation" do
+      expect(adjust("1000000000", reason: "opening_balance", unit_cost: "500000")).to be_success # 5e14 cents
+
+      # +1e15 cents fits the cap by itself, but the balance would reach 1.5e15
+      result = adjust("3000000000", reason: "found", unit_cost: "500000")
+
+      expect(result.details[:fields]).to eq("unit_cost_cents" => [ "too_large" ])
+      expect(balance.on_hand).to eq(BigDecimal("1000000000"))
+    end
+
+    it "blames the quantity when the value came from the average cost" do
+      adjust("1000000000", reason: "opening_balance", unit_cost: "1000000")
+
+      result = adjust("999999999999", reason: "found")
+
+      expect(result.details[:fields]).to eq("counted_quantity" => [ "too_large" ])
+    end
+  end
+
+  describe "valuing an increase" do
+    it "does not treat a balance worth nothing as having an average cost" do
+      # 3 units at 0.3333 cents are worth 1 cent; taking 2 leaves 1 unit worth 0
+      # after the share rounds half up to the whole cent.
+      adjust("3", reason: "opening_balance", unit_cost: "0.3333")
+      adjust("1", reason: "loss")
+      expect(balance).to have_attributes(on_hand: BigDecimal("1"), value_cents: 0)
+
+      result = adjust("4", reason: "found")
+
+      # The old rule multiplied 0 by 3 and let three units in for free.
+      expect(result.value.movement.value_cents).to eq(1)
+    end
+  end
+
+  describe "stock that is already reserved" do
+    it "lets a count go below what is reserved, and shows the shortfall as available" do
+      adjust("10", reason: "opening_balance", unit_cost: "10")
+      balance.update!(reserved: BigDecimal("8"))
+
+      result = adjust("5", reason: "loss")
+
+      expect(result).to be_success
+      expect(result.value.balance).to have_attributes(on_hand: BigDecimal("5"), reserved: BigDecimal("8"), available: BigDecimal("-3"))
+    end
+  end
+
+  describe "input that is not what the API asked for" do
+    it "refuses a floating point number, which is not what was typed" do
+      result = adjust(84.99999999999999999, unit_cost: "1")
+
+      expect(result.details[:fields]).to eq("counted_quantity" => [ "not_a_number" ])
+    end
+
+    it "refuses a note that is not a string" do
+      result = adjust("10", unit_cost: "1", note: { "a" => "b" })
+
+      expect(result.details[:fields]).to eq("note" => [ "invalid" ])
     end
   end
 end

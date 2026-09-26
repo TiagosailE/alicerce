@@ -306,7 +306,7 @@ export interface paths {
         put?: never;
         /**
          * Record a count adjustment
-         * @description Sets the stock of a product in a warehouse to the counted quantity and records the difference as one ledger movement (ADR 0016). Owner, admin and purchasing only (ADR 0008). A count equal to the balance writes no movement and answers 200 with a null movement.
+         * @description Sets the stock of a product in a warehouse to the counted quantity and records the difference as one ledger movement (ADR 0016). Owner, admin and purchasing only (ADR 0008). A count equal to the balance writes no movement and answers 200 with a null movement. The reason must agree with the direction: loss, damage, theft and expiry decrease stock; found and opening_balance increase it, and opening_balance only for a balance with no history.
          */
         post: operations["createStockAdjustment"];
         delete?: never;
@@ -797,12 +797,12 @@ export interface components {
             reserved: string;
             /** @description on_hand minus reserved, computed by the API. */
             available: string;
-            /** @description The inventory value of on_hand, in cents (ADR 0006). */
-            value_cents: number;
+            /** @description The inventory value of on_hand, in cents (ADR 0006). Null for a role that may not see what stock is worth or cost (sales, ADR 0016). */
+            value_cents: number | null;
             /** @enum {string} */
             currency: "BRL";
-            /** @description Cost per stock unit of the latest costed entry, in cents, up to 6 places. */
-            last_unit_cost: string;
+            /** @description Cost per stock unit of the latest costed entry, in cents, always 6 places. Null when value_cents is. */
+            last_unit_cost_cents: string | null;
         };
         StockMovement: {
             id: number;
@@ -814,12 +814,12 @@ export interface components {
             warehouse: components["schemas"]["Warehouse"];
             /** @description Signed, and a negative quantity takes stock out. */
             quantity: string;
-            /** @description Signed like quantity. */
-            value_cents: number;
+            /** @description Signed like quantity. Null for a role that may not see values. */
+            value_cents: number | null;
             /** @enum {string} */
             currency: "BRL";
             on_hand_after: string;
-            value_after_cents: number;
+            value_after_cents: number | null;
             actor: {
                 id: number;
                 name: string;
@@ -846,10 +846,12 @@ export interface components {
             warehouse_id: number;
             /** @description The quantity actually counted, in the product's stock unit, at most 3 places. The API computes the difference from the balance under its lock; the client never does. */
             counted_quantity: string;
+            /** @description The balance's on_hand as the client last saw it ("0.000" when it had no balance). A count is an observation at a moment: if a sale or a receipt moved the balance since, the count is refused with 409 stale, and error details carry current_on_hand (ADR 0016). */
+            expected_on_hand: string;
             reason: components["schemas"]["AdjustmentReason"];
             note?: string;
-            /** @description Cost per stock unit in cents, at most 6 places, for an increase. Required when the balance has no average or last cost to value it with (unit_cost required); not allowed for a decrease (ADR 0016). */
-            unit_cost?: string;
+            /** @description Cost per stock unit in cents (a decimal string, since a unit can cost a fraction of a cent), at most 6 places, for an increase. Required when the balance has no average or last cost to value it with (kind required on unit_cost_cents); not allowed for a decrease (ADR 0016). */
+            unit_cost_cents?: string;
         };
         /** @description A partner as listed (ADR 0014). The CPF is masked for every role and e-mail and phone are not part of a list; the full record comes from GET /partners/{id}. */
         PartnerSummary: {
@@ -1600,6 +1602,7 @@ export interface operations {
             404: components["responses"]["Error"];
             409: components["responses"]["Error"];
             422: components["responses"]["Error"];
+            429: components["responses"]["Error"];
         };
     };
     listPartners: {

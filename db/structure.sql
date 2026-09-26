@@ -69,6 +69,30 @@ $$;
 
 
 --
+-- Name: inventory_movement_redact_note(bigint, bigint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.inventory_movement_redact_note(target_organization_id bigint, target_movement_id bigint) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    AS $$
+DECLARE
+  redacted_count bigint;
+BEGIN
+  IF target_organization_id IS DISTINCT FROM NULLIF(current_setting('app.organization_id', true), '')::bigint THEN
+    RAISE EXCEPTION 'inventory_movement_redact_note: not the current organization';
+  END IF;
+
+  UPDATE inventory_movements
+  SET note = NULL
+  WHERE organization_id = target_organization_id AND id = target_movement_id AND note IS NOT NULL;
+
+  GET DIAGNOSTICS redacted_count = ROW_COUNT;
+  RETURN redacted_count;
+END;
+$$;
+
+
+--
 -- Name: inventory_movements_append_only(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -81,6 +105,23 @@ BEGIN
   END IF;
 
   RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
+
+--
+-- Name: inventory_movements_no_truncate(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.inventory_movements_no_truncate() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF current_user <> (SELECT tableowner FROM pg_tables WHERE schemaname = 'public' AND tablename = 'inventory_movements') THEN
+    RAISE EXCEPTION 'inventory_movements is append-only: TRUNCATE is not permitted for %', current_user;
+  END IF;
+
+  RETURN NULL;
 END;
 $$;
 
@@ -2213,6 +2254,13 @@ CREATE TRIGGER inventory_movements_append_only BEFORE DELETE OR UPDATE ON public
 
 
 --
+-- Name: inventory_movements inventory_movements_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER inventory_movements_no_truncate BEFORE TRUNCATE ON public.inventory_movements FOR EACH STATEMENT EXECUTE FUNCTION public.inventory_movements_no_truncate();
+
+
+--
 -- Name: catalog_products fk_catalog_products_category_same_organization; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2674,6 +2722,7 @@ CREATE POLICY inventory_warehouses_tenant_isolation ON public.inventory_warehous
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20260926120400'),
 ('20260926120300'),
 ('20260926120200'),
 ('20260926120100'),

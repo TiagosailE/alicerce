@@ -5,9 +5,11 @@
 module Pagination
   DEFAULT_PER_PAGE = 25
   MAX_PER_PAGE = 100
+  # An OFFSET past bigint is a database error, and no list has this many pages.
+  MAX_PAGE = 1_000_000
 
   def initialize(scope, page: nil, per_page: nil, **filters)
-    @page = [ page.to_i, 1 ].max
+    @page = page.to_i.clamp(1, MAX_PAGE)
     @per_page = per_page.presence ? per_page.to_i.clamp(1, MAX_PER_PAGE) : DEFAULT_PER_PAGE
     @scope = filtered(scope, **filters)
   end

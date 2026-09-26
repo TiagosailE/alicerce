@@ -5,11 +5,15 @@ module Api
 
       def index
         authorize(Inventory::Balance)
+        value_visible = policy(Inventory::Balance).view_value?
         query = Inventory::BalancesQuery.new(
           policy_scope(Inventory::Balance), **pagination_params,
           warehouse_id: scalar_param(:warehouse_id), product_id: scalar_param(:product_id), q: scalar_param(:q)
         )
-        render json: { data: query.results.map { |balance| Inventory::BalanceSerializer.new(balance).as_json }, meta: query.meta }
+        render json: {
+          data: query.results.map { |balance| Inventory::BalanceSerializer.new(balance, value_visible:).as_json },
+          meta: query.meta
+        }
       end
     end
   end

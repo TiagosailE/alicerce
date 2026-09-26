@@ -9,6 +9,12 @@ module Inventory
 
     KINDS = %w[adjustment].freeze
     ADJUSTMENT_REASONS = %w[opening_balance count loss damage theft expiry found other].freeze
+    # A reason states why stock moved, so it has a direction: a theft is never
+    # an increase and a found item is never a decrease. Reports built on
+    # reasons (losses, the income statement) rely on this. count and other
+    # go either way.
+    DECREASE_ONLY_REASONS = %w[loss damage theft expiry].freeze
+    INCREASE_ONLY_REASONS = %w[opening_balance found].freeze
     NOTE_MAX_LENGTH = 500
 
     belongs_to :product, class_name: "Catalog::Product"

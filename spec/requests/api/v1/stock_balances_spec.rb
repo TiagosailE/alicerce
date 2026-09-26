@@ -15,8 +15,8 @@ RSpec.describe "Stock balances API" do
   def stock!(org, product, warehouse, quantity, cost: "10")
     set_current_tenant(org)
     result = Inventory::AdjustStock.call(
-      organization: org, actor:, product:, warehouse:, counted_quantity: quantity, reason: "opening_balance", unit_cost: cost,
-      idempotency_key: SecureRandom.uuid, request_digest: SecureRandom.hex(8)
+      organization: org, actor:, product:, warehouse:, counted_quantity: quantity, expected_on_hand: "0", reason: "opening_balance",
+      unit_cost_cents: cost, idempotency_key: SecureRandom.uuid, request_digest: SecureRandom.hex(8)
     )
     raise result.error.to_s unless result.success?
   end
@@ -42,8 +42,8 @@ RSpec.describe "Stock balances API" do
       end
     end
 
-    it "lists only the current organization's balances, by product name, with available stock" do
-      user = create_membership(organization, role: "sales")
+    it "lists only the current organization's balances, by product name, with available stock and value" do
+      user = create_membership(organization, role: "finance")
       set_current_tenant(organization)
       loja = create(:warehouse, organization:, name: "Loja")
       cimento = create(:product, organization:, sku: "CIM-50", name: "Cimento 50kg")
@@ -87,6 +87,36 @@ RSpec.describe "Stock balances API" do
 
       get "/api/v1/stock_balances", params: { product_id: areia.id }
       expect(response.parsed_body["meta"]["total"]).to eq(1)
+    end
+
+    # ADR 0016: what stock is worth and cost is margin data. Every role reads
+    # quantities; only sales does not read values.
+    %w[owner admin purchasing finance read_only].each do |role|
+      it "shows the #{role} role the value and the last cost" do
+        user = create_membership(organization, role:)
+        set_current_tenant(organization)
+        stock!(organization, create(:product, organization:), create(:warehouse, organization:), "10", cost: "84.99")
+        sign_in_via_api(email: user.email, password:)
+
+        get "/api/v1/stock_balances"
+
+        assert_response_schema_confirm(200)
+        expect(response.parsed_body["data"].first).to include("value_cents" => 850, "last_unit_cost_cents" => "84.990000")
+      end
+    end
+
+    it "hides the value and the last cost from the sales role, who still sees quantities" do
+      user = create_membership(organization, role: "sales")
+      set_current_tenant(organization)
+      stock!(organization, create(:product, organization:), create(:warehouse, organization:), "10", cost: "84.99")
+      sign_in_via_api(email: user.email, password:)
+
+      get "/api/v1/stock_balances"
+
+      assert_response_schema_confirm(200)
+      row = response.parsed_body["data"].first
+      expect(row).to include("on_hand" => "10.000", "available" => "10.000", "value_cents" => nil, "last_unit_cost_cents" => nil)
+      expect(response.body).not_to include("84.99")
     end
   end
 end
