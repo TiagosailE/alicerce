@@ -17,6 +17,9 @@ import {
 } from "./features/purchasing/PurchaseOrderFormScreen";
 import { PurchaseOrderDetailScreen } from "./features/purchasing/PurchaseOrderDetailScreen";
 import { PurchaseOrdersScreen } from "./features/purchasing/PurchaseOrdersScreen";
+import { ReceiptDetailScreen } from "./features/purchasing/ReceiptDetailScreen";
+import { ReceiptsScreen } from "./features/purchasing/ReceiptsScreen";
+import { ReceiveGoodsScreen } from "./features/purchasing/ReceiveGoodsScreen";
 import { SignInScreen } from "./features/identity/SignInScreen";
 import { t } from "./i18n";
 
@@ -99,6 +102,15 @@ export function App() {
       membership.role === "read_only"),
   );
   const canManagePurchasing = canManageMasterData;
+  // Mirrors Identity::Capabilities.view_payables? (ADR 0017: owner, admin,
+  // finance and read_only read payables; purchasing does not).
+  const canViewPayables = Boolean(
+    membership &&
+    (membership.role === "owner" ||
+      membership.role === "admin" ||
+      membership.role === "finance" ||
+      membership.role === "read_only"),
+  );
 
   return (
     <Routes>
@@ -155,11 +167,33 @@ export function App() {
                       <>
                         <Route path="/compras/novo" element={<NewPurchaseOrderScreen />} />
                         <Route path="/compras/:id/editar" element={<EditPurchaseOrderScreen />} />
+                        <Route
+                          path="/compras/:id/receber"
+                          element={
+                            <ReceiveGoodsScreen
+                              timeZone={membership.organization.time_zone}
+                              canViewPayables={canViewPayables}
+                            />
+                          }
+                        />
                       </>
                     )}
                     <Route
                       path="/compras/:id"
-                      element={<PurchaseOrderDetailScreen canManage={canManagePurchasing} />}
+                      element={
+                        <PurchaseOrderDetailScreen
+                          canManage={canManagePurchasing}
+                          canViewPayables={canViewPayables}
+                        />
+                      }
+                    />
+                    <Route
+                      path="/recebimentos"
+                      element={<ReceiptsScreen canManage={canManagePurchasing} />}
+                    />
+                    <Route
+                      path="/recebimentos/:id"
+                      element={<ReceiptDetailScreen canViewPayables={canViewPayables} />}
                     />
                   </>
                 )}

@@ -179,6 +179,7 @@ describe("PurchaseOrdersScreen", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Limpar filtros" }));
+    expect(screen.getByLabelText("Buscar")).toHaveFocus();
 
     await waitFor(() => {
       expect(screen.getByLabelText("Buscar")).toHaveValue("");

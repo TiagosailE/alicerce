@@ -72,7 +72,7 @@ export function wasSaved(state: unknown): boolean {
 }
 
 /** The id in an address, or null when it is not a whole number: "novo" or "x"
- * must not become a request for order NaN. */
-export function orderIdFromParam(value: string | undefined): number | null {
+ * must not become a request for record NaN. */
+export function idFromParam(value: string | undefined): number | null {
   return value !== undefined && /^[1-9]\d{0,14}$/.test(value) ? Number(value) : null;
 }

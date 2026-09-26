@@ -30,6 +30,10 @@ export function AppShell({
   const stockActive =
     matchPath({ path: "/estoque", end: true }, pathname) !== null ||
     matchPath({ path: "/estoque/movimentacoes", end: false }, pathname) !== null;
+  // Purchasing is orders and receipts, two areas that share one nav link.
+  const purchasingActive =
+    matchPath({ path: "/compras", end: false }, pathname) !== null ||
+    matchPath({ path: "/recebimentos", end: false }, pathname) !== null;
 
   return (
     <div className="flex min-h-screen flex-col bg-surface">
@@ -70,14 +74,13 @@ export function AppShell({
             {t("shell.navWarehouses")}
           </NavLink>
           {canViewPurchasing && (
-            <NavLink
+            <Link
               to="/compras"
-              className={({ isActive }) =>
-                `shrink-0 rounded-md px-2 py-1 ${isActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`
-              }
+              className={`shrink-0 rounded-md px-2 py-1 ${purchasingActive ? "bg-row-selected text-text" : "text-text-muted hover:bg-row-hover hover:text-text"}`}
+              aria-current={purchasingActive ? "page" : undefined}
             >
               {t("shell.navPurchasing")}
-            </NavLink>
+            </Link>
           )}
           <NavLink
             to="/parceiros"

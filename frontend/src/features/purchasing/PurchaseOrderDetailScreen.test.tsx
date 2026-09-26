@@ -11,6 +11,7 @@ import { order, orderLine } from "./testData";
 function renderScreen(
   canManage = true,
   entry: string | { pathname: string; state: unknown } = "/compras/9",
+  canViewPayables = true,
 ) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -19,7 +20,9 @@ function renderScreen(
         <Routes>
           <Route
             path="/compras/:id"
-            element={<PurchaseOrderDetailScreen canManage={canManage} />}
+            element={
+              <PurchaseOrderDetailScreen canManage={canManage} canViewPayables={canViewPayables} />
+            }
           />
           <Route path="/compras/:id/editar" element={<h1>Editar</h1>} />
           <Route path="/compras" element={<h1>Lista</h1>} />
@@ -406,5 +409,74 @@ describe("PurchaseOrderDetailScreen", () => {
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancelar pedido" })).toHaveFocus();
+  });
+
+  it("offers to receive goods, and to see the receipts, on an approved order", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /purchase_orders/9": () =>
+          jsonResponse({ data: order({ status: "partially_received" }) }),
+      }),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByRole("link", { name: "Receber mercadoria" })).toHaveAttribute(
+      "href",
+      "/compras/9/receber",
+    );
+    expect(screen.getByRole("link", { name: "Ver recebimentos deste pedido" })).toHaveAttribute(
+      "href",
+      "/recebimentos?order=9",
+    );
+  });
+
+  it("does not offer to receive goods on a draft or a closed order, or to a role that cannot write", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /purchase_orders/9": () => jsonResponse({ data: order({ status: "draft" }) }),
+      }),
+    );
+    renderScreen();
+    await screen.findByRole("heading", { name: "Pedido de compra nº 4" });
+    expect(screen.queryByRole("link", { name: "Receber mercadoria" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Ver recebimentos deste pedido" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets a read-only role see the receipts of an approved order but not receive", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /purchase_orders/9": () => jsonResponse({ data: order({ status: "approved" }) }),
+      }),
+    );
+
+    renderScreen(false);
+
+    expect(
+      await screen.findByRole("link", { name: "Ver recebimentos deste pedido" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Receber mercadoria" })).not.toBeInTheDocument();
+  });
+
+  it("does not mention payables in the cancel dialog to a role that cannot read them", async () => {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock({
+        "GET /purchase_orders/9": () => jsonResponse({ data: order({ status: "approved" }) }),
+      }),
+    );
+    const user = userEvent.setup();
+    renderScreen(true, "/compras/9", false);
+
+    await user.click(await screen.findByRole("button", { name: "Cancelar pedido" }));
+
+    const dialog = screen.getByRole("alertdialog");
+    expect(dialog).toHaveTextContent("O que já foi recebido continua no estoque.");
+    expect(dialog).not.toHaveTextContent(/contas a pagar/);
   });
 });
