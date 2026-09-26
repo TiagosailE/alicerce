@@ -573,6 +573,179 @@ paths:
         "429":
           $ref: "#/components/responses/Error"
 
+  /purchase_orders:
+    get:
+      operationId: listPurchaseOrders
+      summary: List purchase orders, newest number first
+      description: Owner, admin, purchasing, finance and read_only can read; sales has no access (ADR 0017, ADR 0008).
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100 }
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/PurchaseOrderStatus" }
+        - name: supplier_id
+          in: query
+          schema: { type: integer }
+        - name: q
+          in: query
+          description: Matches the order number or the supplier's name.
+          schema: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/PurchaseOrderListResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: createPurchaseOrder
+      summary: Create a draft purchase order
+      description: >
+        Owner, admin and purchasing only. Copies the supplier and each product as
+        they are now (ADR 0015), works out every line's amounts and the order's
+        total, and numbers the order. Amounts are stored; a client never computes
+        them.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePurchaseOrderRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/PurchaseOrderResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
+
+  /purchase_orders/{id}:
+    get:
+      operationId: showPurchaseOrder
+      summary: Show a purchase order with its lines
+      description: The supplier's CPF is masked for a role that may not see a partner's in full (ADR 0014).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/PurchaseOrderResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updatePurchaseOrder
+      summary: Replace a draft purchase order's supplier, terms, note and lines
+      description: >
+        Owner, admin and purchasing only, and only while the order is a draft. Send
+        the revision that was read; a newer one on the server answers 409 stale and
+        writes nothing (ADR 0015).
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePurchaseOrderRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/PurchaseOrderResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /purchase_orders/{id}/approval:
+    post:
+      operationId: approvePurchaseOrder
+      summary: Approve a draft purchase order
+      description: >
+        Owner, admin and purchasing only. The approver sends the revision they saw,
+        so an edit made in between answers 409 stale instead of being approved
+        unseen. Approval checks the order can be received and freezes what it copies.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseOrderRevisionRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/PurchaseOrderResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/Error"
+
+  /purchase_orders/{id}/cancellation:
+    post:
+      operationId: cancelPurchaseOrder
+      summary: Cancel a purchase order
+      description: >
+        Owner, admin and purchasing only. A draft or approved order ends; a partially
+        received one is closed at what has been received. A received or cancelled
+        order answers 409 invalid_transition.
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/PurchaseOrderResponse"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+
   /partners:
     get:
       operationId: listPartners
@@ -1053,6 +1226,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StockAdjustmentResponseBody"
+    PurchaseOrderResponse:
+      description: A purchase order with its lines.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PurchaseOrderResponseBody"
+    PurchaseOrderListResponse:
+      description: A page of purchase orders.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PurchaseOrderListResponseBody"
     PartnerResponse:
       description: A partner.
       content:
@@ -1730,6 +1915,227 @@ components:
             Required when the balance has no average or last cost to value it
             with (kind required on unit_cost_cents); not allowed for a
             decrease (ADR 0016).
+
+    PurchaseOrderStatus:
+      type: string
+      enum: [ draft, approved, partially_received, received, cancelled ]
+
+    PurchaseOrderSummary:
+      type: object
+      additionalProperties: false
+      required: [ id, number, status, supplier, total_cents, currency, created_at ]
+      properties:
+        id: { type: integer }
+        number: { type: integer }
+        status:
+          $ref: "#/components/schemas/PurchaseOrderStatus"
+        supplier:
+          type: object
+          additionalProperties: false
+          required: [ id, name ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        total_cents: { type: integer }
+        currency:
+          type: string
+          enum: [ BRL ]
+        created_at:
+          type: string
+          format: date-time
+
+    PurchaseOrderLine:
+      type: object
+      additionalProperties: false
+      required: [ id, position, product, purchase_unit_code, stock_unit_code, factor, quantity, received_quantity, remaining_quantity, unit_price_cents, discount_bp, gross_cents, discount_cents, net_cents ]
+      properties:
+        id: { type: integer }
+        position: { type: integer }
+        product:
+          type: object
+          additionalProperties: false
+          required: [ id, sku, name ]
+          properties:
+            id: { type: integer }
+            sku: { type: string }
+            name: { type: string }
+        purchase_unit_code: { type: string }
+        stock_unit_code: { type: string }
+        factor:
+          type: string
+          pattern: '^[0-9]{1,9}\.[0-9]{6}$'
+          description: Stock units per purchase unit, as copied from the product (ADR 0015).
+        quantity:
+          type: string
+          pattern: '^[0-9]{1,12}\.[0-9]{3}$'
+          description: In purchase units.
+        received_quantity:
+          type: string
+          pattern: '^[0-9]{1,12}\.[0-9]{3}$'
+        remaining_quantity:
+          type: string
+          pattern: '^[0-9]{1,12}\.[0-9]{3}$'
+        unit_price_cents:
+          type: integer
+          description: Per purchase unit.
+        discount_bp:
+          type: integer
+          description: Basis points, 0 to 10000.
+        gross_cents: { type: integer }
+        discount_cents: { type: integer }
+        net_cents: { type: integer }
+
+    PurchaseOrder:
+      type: object
+      additionalProperties: false
+      required: [ id, number, status, supplier, installments, first_due_days, interval_days, note, total_cents, currency, revision, personal_data_visible, approved_at, cancelled_at, created_at, lines ]
+      properties:
+        id: { type: integer }
+        number: { type: integer }
+        status:
+          $ref: "#/components/schemas/PurchaseOrderStatus"
+        supplier:
+          type: object
+          additionalProperties: false
+          required: [ id, name, document_type, document_number ]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            document_type:
+              type: string
+              enum: [ cpf, cnpj ]
+            document_number:
+              type: string
+              description: Copied when the order was created; a CPF is masked when personal_data_visible is false (ADR 0014).
+        installments: { type: integer }
+        first_due_days: { type: integer }
+        interval_days: { type: integer }
+        note:
+          type: string
+          nullable: true
+        total_cents:
+          type: integer
+          description: The sum of the lines' net amounts, stored.
+        currency:
+          type: string
+          enum: [ BRL ]
+        revision:
+          type: integer
+          description: Send it back when editing or approving a draft (ADR 0015).
+        personal_data_visible: { type: boolean }
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/PurchaseOrderLine" }
+
+    PurchaseOrderResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data ]
+      properties:
+        data:
+          $ref: "#/components/schemas/PurchaseOrder"
+
+    PurchaseOrderListResponseBody:
+      type: object
+      additionalProperties: false
+      required: [ data, meta ]
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/PurchaseOrderSummary" }
+        meta:
+          $ref: "#/components/schemas/Meta"
+
+    PurchaseOrderLineInput:
+      type: object
+      additionalProperties: false
+      required: [ product_id, quantity, unit_price_cents ]
+      properties:
+        product_id: { type: integer }
+        quantity:
+          type: string
+          pattern: '^[0-9]{1,12}(\.[0-9]{1,3})?$'
+          description: In purchase units, at most 3 places.
+        unit_price_cents:
+          type: integer
+          minimum: 0
+          description: Per purchase unit.
+        discount_bp:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Basis points off the line's gross; 0 when omitted.
+
+    CreatePurchaseOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [ supplier_id, lines ]
+      properties:
+        supplier_id: { type: integer }
+        installments:
+          type: integer
+          minimum: 1
+          maximum: 24
+          description: How many installments each receipt's payable is split in; 1 when omitted.
+        first_due_days:
+          type: integer
+          minimum: 0
+          maximum: 365
+          description: Days from the receipt to the first due date; 30 when omitted.
+        interval_days:
+          type: integer
+          minimum: 0
+          maximum: 365
+          description: Days between installments; 30 when omitted.
+        note:
+          type: string
+          maxLength: 1000
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { $ref: "#/components/schemas/PurchaseOrderLineInput" }
+
+    UpdatePurchaseOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [ supplier_id, lines, revision ]
+      properties:
+        supplier_id: { type: integer }
+        installments: { type: integer, minimum: 1, maximum: 24 }
+        first_due_days: { type: integer, minimum: 0, maximum: 365 }
+        interval_days: { type: integer, minimum: 0, maximum: 365 }
+        note:
+          type: string
+          maxLength: 1000
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { $ref: "#/components/schemas/PurchaseOrderLineInput" }
+        revision:
+          type: integer
+          description: The revision that was read; a newer one answers 409 stale (ADR 0015).
+
+    PurchaseOrderRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [ revision ]
+      properties:
+        revision:
+          type: integer
+          description: The revision the approver saw; a newer one answers 409 stale (ADR 0015).
 
     PartnerSummary:
       type: object

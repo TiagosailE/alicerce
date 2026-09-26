@@ -15,6 +15,12 @@ Rails.application.routes.draw do
       resources :stock_movements, only: :index
       resources :stock_adjustments, only: :create
       resources :partners, only: %i[index show create update]
+      resources :purchase_orders, only: %i[index show create update] do
+        scope module: :purchase_orders do
+          resource :approval, only: :create
+          resource :cancellation, only: :create
+        end
+      end
       resources :invitations, only: %i[create index destroy]
       # The token is the credential; it travels in the body, never the URL
       # (a security review of the password reset routes below found that
