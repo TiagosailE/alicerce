@@ -11,13 +11,13 @@ module Api
           **pagination_params,
           customer: scalar_param(:customer), supplier: scalar_param(:supplier), active: scalar_param(:active), q: scalar_param(:q)
         )
-        render json: { data: query.results.map { |partner| Catalog::PartnerSerializer.new(partner).as_json }, meta: query.meta }
+        render json: { data: query.results.map { |partner| Catalog::PartnerSummarySerializer.new(partner).as_json }, meta: query.meta }
       end
 
       def show
         partner = find_partner
         authorize(partner)
-        render json: { data: Catalog::PartnerSerializer.new(partner).as_json }
+        render_partner(partner)
       end
 
       def create
@@ -31,7 +31,7 @@ module Api
         )
         return render_result_error(result) unless result.success?
 
-        render json: { data: Catalog::PartnerSerializer.new(result.value).as_json }, status: :created
+        render_partner(result.value, status: :created)
       end
 
       def update
@@ -50,10 +50,15 @@ module Api
         )
         return render_result_error(result) unless result.success?
 
-        render json: { data: Catalog::PartnerSerializer.new(result.value).as_json }
+        render_partner(result.value)
       end
 
       private
+        def render_partner(partner, status: :ok)
+          visible = policy(partner).view_personal_data?
+          render json: { data: Catalog::PartnerSerializer.new(partner, personal_data_visible: visible).as_json }, status:
+        end
+
         def find_partner
           Catalog::Partner.find(params[:id])
         end

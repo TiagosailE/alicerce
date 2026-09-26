@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Partner } from "./api";
+import type { PartnerSummary } from "./api";
 import { PartnersScreen } from "./PartnersScreen";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -53,7 +53,7 @@ function createFetchMock(
   });
 }
 
-function partner(overrides: Partial<Partner> = {}): Partner {
+function partner(overrides: Partial<PartnerSummary> = {}): PartnerSummary {
   return {
     id: 1,
     name: "Marcos Pereira",
@@ -61,8 +61,6 @@ function partner(overrides: Partial<Partner> = {}): Partner {
     document_number: "52998224725",
     customer: true,
     supplier: false,
-    email: null,
-    phone: null,
     active: true,
     ...overrides,
   };

@@ -714,24 +714,40 @@ export interface components {
             name: string;
             active: boolean;
         };
+        /** @description A partner as listed (ADR 0014). The CPF is masked for every role and e-mail and phone are not part of a list; the full record comes from GET /partners/{id}. */
+        PartnerSummary: {
+            id: number;
+            name: string;
+            /** @enum {string} */
+            document_type: "cpf" | "cnpj";
+            /** @description A CPF with only the middle six digits visible ("***982247**"); a CNPJ in full, since it is public registry data. */
+            document_number: string;
+            customer: boolean;
+            supplier: boolean;
+            active: boolean;
+        };
         Partner: {
             id: number;
             name: string;
             /** @enum {string} */
             document_type: "cpf" | "cnpj";
-            /** @description Digits only for a CPF; digits and upper-case letters for a CNPJ (ADR 0012, alphanumeric since July 2026). No punctuation. */
+            /** @description Digits only for a CPF; digits and upper-case letters for a CNPJ (ADR 0012, alphanumeric since July 2026). No punctuation. A CPF is masked as in PartnerSummary when personal_data_visible is false. */
             document_number: string;
             customer: boolean;
             supplier: boolean;
+            /** @description Always null when personal_data_visible is false. */
             email: string | null;
+            /** @description Always null when personal_data_visible is false. */
             phone: string | null;
+            /** @description False when the caller's role may not see this partner's CPF, e-mail and phone in full (ADR 0014: read_only). */
+            personal_data_visible: boolean;
             active: boolean;
         };
         PartnerResponseBody: {
             data: components["schemas"]["Partner"];
         };
         PartnerListResponseBody: {
-            data: components["schemas"]["Partner"][];
+            data: components["schemas"]["PartnerSummary"][];
             meta: components["schemas"]["Meta"];
         };
         CreatePartnerRequest: {

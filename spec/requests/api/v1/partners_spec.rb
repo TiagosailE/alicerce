@@ -117,6 +117,76 @@ RSpec.describe "Partners API" do
     end
   end
 
+  # ADR 0014: a page of up to 100 partners must not be a bulk export of
+  # personal data, and the roles that only read do not need the full CPF.
+  describe "personal data visibility" do
+    let(:cpf) { DocumentNumberGenerator.cpf }
+    let(:cnpj) { DocumentNumberGenerator.cnpj }
+
+    before do
+      set_current_tenant(organization)
+      @person = create(:partner, organization:, name: "Marcos Pereira", document_type: "cpf", document_number: cpf,
+        email: "marcos@example.com", phone: "71999990000")
+      @company = create(:partner, organization:, name: "Cimento SA", document_type: "cnpj", document_number: cnpj,
+        email: "contato@example.com", phone: "7133330000", customer: false, supplier: true)
+    end
+
+    %w[owner admin purchasing sales finance read_only].each do |role|
+      it "lists a masked CPF, a full CNPJ and no e-mail or phone for the #{role} role" do
+        actor, = create_membership(organization, role:)
+        sign_in_via_api(email: actor.email, password:)
+
+        get "/api/v1/partners"
+
+        expect(response).to have_http_status(:ok)
+        assert_response_schema_confirm(200)
+        rows = response.parsed_body["data"].index_by { |row| row["id"] }
+        expect(rows[@person.id]["document_number"]).to eq("***#{cpf[3, 6]}**")
+        expect(rows[@company.id]["document_number"]).to eq(cnpj)
+        expect(rows.values.flat_map(&:keys).uniq)
+          .to match_array(%w[id name document_type document_number customer supplier active])
+      end
+    end
+
+    %w[owner admin purchasing sales finance].each do |role|
+      it "shows the #{role} role the full record" do
+        actor, = create_membership(organization, role:)
+        sign_in_via_api(email: actor.email, password:)
+
+        get "/api/v1/partners/#{@person.id}"
+
+        assert_response_schema_confirm(200)
+        expect(response.parsed_body["data"]).to include(
+          "document_number" => cpf, "email" => "marcos@example.com", "phone" => "71999990000",
+          "personal_data_visible" => true
+        )
+      end
+    end
+
+    it "shows the read_only role a masked CPF and no e-mail or phone, and says so" do
+      actor, = create_membership(organization, role: "read_only")
+      sign_in_via_api(email: actor.email, password:)
+
+      get "/api/v1/partners/#{@person.id}"
+
+      assert_response_schema_confirm(200)
+      expect(response.parsed_body["data"]).to include(
+        "document_number" => "***#{cpf[3, 6]}**", "email" => nil, "phone" => nil, "personal_data_visible" => false
+      )
+      expect(response.body).not_to include(cpf)
+      expect(response.body).not_to include("marcos@example.com")
+    end
+
+    it "shows the read_only role a company's CNPJ in full" do
+      actor, = create_membership(organization, role: "read_only")
+      sign_in_via_api(email: actor.email, password:)
+
+      get "/api/v1/partners/#{@company.id}"
+
+      expect(response.parsed_body.dig("data", "document_number")).to eq(cnpj)
+    end
+  end
+
   describe "POST /api/v1/partners" do
     it "requires the CSRF token from a prior GET" do
       owner, = create_membership(organization, role: "owner")

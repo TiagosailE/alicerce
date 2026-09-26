@@ -225,6 +225,7 @@ export const ptBR = {
   "partners.kindBoth": "Cliente e fornecedor",
   "partners.activeLabel": "Ativo",
   "partners.notInformed": "Não informado",
+  "partners.restricted": "Restrito ao seu perfil",
 
   "partners.createSubmit": "Salvar",
   "partners.createSubmitting": "Salvando…",

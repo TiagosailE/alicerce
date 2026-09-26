@@ -42,5 +42,14 @@ module Identity
     def view_master_data?(membership)
       membership.present?
     end
+
+    # ADR 0014: the full CPF, e-mail and phone of a partner are personal
+    # data, so read_only sees them masked or absent; every role that works
+    # with customers and suppliers sees them.
+    def view_partner_personal_data?(membership)
+      return false unless membership
+
+      membership.role != "read_only"
+    end
   end
 end
