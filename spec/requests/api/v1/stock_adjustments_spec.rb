@@ -340,5 +340,24 @@ RSpec.describe "Stock adjustments API" do
       expect(statuses.last).to eq(429)
       assert_response_schema_confirm(429) if response.status == 429
     end
+
+    it "answers 429 past the ceiling for the organization as a whole, however many accounts share it" do
+      accounts = Array.new(4) { create_membership(organization, role: "owner") }
+      product, warehouse = stock_setup
+      bad = adjustment_params(product, warehouse, counted_quantity: "abc")
+      statuses = []
+
+      accounts.each do |account|
+        csrf_token = sign_in_and_csrf(account)
+        55.times do
+          post "/api/v1/stock_adjustments", params: bad, as: :json, headers: headers(csrf_token)
+          statuses << response.status
+        end
+      end
+
+      # 4 x 55 = 220 requests: no account is over its own 60 a minute, the organization is over 200 in ten
+      expect(statuses.first(200)).to all(eq(422))
+      expect(statuses.last).to eq(429)
+    end
   end
 end

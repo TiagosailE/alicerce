@@ -103,7 +103,26 @@ migrations require.
 
 **One writer.** `Inventory::Ledger.post` is the only code that writes a movement
 and moves a balance, without a transaction or valuation of its own, so receipts,
-issues and reversals will post through it inside their own transactions.
+issues and reversals will post through it inside their own transactions. It
+re-reads the balance under the lock the caller holds instead of trusting the
+instance it was given, so a stale copy (a second line of the same document
+loaded before the first posted) cannot make a movement's "after" figures drift
+from the ledger. Nothing in the database ties a balance to its last movement
+(the app role must be able to update both); the single writer, this re-read and
+the chain spec are the controls. Slice 5 adds `reserved` and the lowering of
+`negative_allowance` (ADR 0004) to this one method, not to a second writer.
+
+**A receipt that clears negative stock posts its revaluation first.** ADR 0006
+lists the receipt and then a `revaluation` movement (quantity zero) for the
+units that went out uncovered. Posted in that order, a receipt that lands
+exactly on zero at a cost other than the last cost (on hand -4, value -4.400,
+receive 4 at 1.200) would leave the balance at zero stock with a value of 400 for
+an instant, which the `value follows stock` check refuses. So the slice that
+builds receipts posts the revaluation of the uncovered units first (-4 units now
+worth -4.800, still a valid negative balance) and the receipt second (0 units,
+value 0). Every intermediate balance is valid, ADR 0006's numbers are
+unchanged, and that slice specs both its worked example and this exact-clear
+case.
 
 **Idempotency** (ADR 0005) is `Idempotency.run` inside the command transaction
 and `IdempotencyKey`. It handles a replay and a reused key itself and raises if
@@ -114,19 +133,28 @@ on `POST /stock_adjustments`; a missing one answers 400, a reused key with
 another request 422 `idempotency_key_reused`. `Idempotency::PurgeExpiredJob`
 deletes keys older than 24 hours, organization by organization, every hour.
 
-**Authorization.** Every role reads balances and movements. What stock is worth
-and what it cost (`value_cents`, `last_unit_cost_cents`, and a movement's value
-and value after) is margin data: every role but `sales` sees it, and for sales
-those fields are null. Adjusting: owner, admin and purchasing, as ADR 0008's
-matrix says, at most 60 requests a minute per user (each writes a permanent row
-and the demo accounts are shared and public). The capabilities live in
+**Authorization.** Every role reads the balances. Sales reads quantities only:
+what stock is worth and what it cost (`value_cents`, `last_unit_cost_cents`) is
+margin data and is null for sales. The movement ledger, which names who moved
+what and carries the note, is for every role but sales (ADR 0008's matrix gives
+sales no stock access beyond seeing what is available to sell). This reads
+ADR 0008's "read" for stock as: balances for all, the ledger for all but sales. Adjusting: owner, admin and purchasing, as ADR 0008's
+matrix says, at most 60 requests a minute per user and 200 in ten minutes per
+organization (each writes a permanent row, and the demo accounts are shared and
+public, so several accounts of one organization must not add up to a flood). The capabilities live in
 `Identity::Capabilities`.
 
 **The note is free text in an immutable table.** It is filtered from request
 logs, recorded in the audit trail as changed without its value, and can be
 erased through the owner-only, organization-bound function
 `inventory_movement_redact_note`, so an erasure request can be met without
-weakening the ledger for anyone else.
+weakening the ledger for anyone else. It is executable by the owner role only:
+the app role is what an SQL injection would run as, and nothing in the
+application calls the function. Erasing a note is therefore an operator's act
+until the LGPD slice adds a command that records who did it. `db/structure.sql`
+omits privileges, so `DatabaseRoles` re-revokes the function on every prepare in
+development and test; a spec runs as the owner to prove the function works and
+as a role that does hold the table privileges to prove the ledger's triggers.
 
 **Locks.** The order of ADR 0004 is followed as written; a product row is locked
 `FOR NO KEY UPDATE` everywhere (the edit commands of ADR 0015 included), because
@@ -149,7 +177,10 @@ key and `FOR UPDATE` would make every product edit stall stock.
   inactive product or warehouse (a discontinued product still has stock to
   count); every role seeing the name of whoever made a movement (accountability
   is the point of a ledger); and clearing the ledger of the public demo, which
-  the app role cannot do and a reset job would have to do as the owner.
+  the app role cannot do: the nightly reset (not built yet) runs as the owner
+  role, which the trigger allows, deleting movements, balances and keys before
+  reseeding. The seeds skip a balance that already has history, so a reseed
+  after the keys expired does not fail as stale.
 - Weakest assumption: that a stated cost overwriting `last_unit_cost` is the
   right treatment. It is the freshest cost knowledge the system has, but a
   clerk typing the wrong price would distort the next issue at zero stock; the
@@ -157,6 +188,16 @@ key and `FOR UPDATE` would make every product edit stall stock.
 
 ## What would make me change my mind
 
+- Stale refusals are frequent on busy products. A count takes minutes, and on a
+  product that moves twenty times an hour the chance that the balance changed
+  while someone counted is about 80%. Exact `expected_on_hand` is right for a
+  count made in a quiet moment (closing time), and wrong for a live count of a
+  hot product. The alternative is to let the operator state when they counted
+  (`counted_at`, defaulting to when the form opened) and have the API derive the
+  balance at that moment from the ledger (the current balance minus the
+  movements after it), post the difference, and never refuse. That trades a
+  refusal for a rule about trusting a client clock, so it waits for evidence that
+  the refusals cost more than they protect.
 - Users routinely count stock with no cost knowledge: allow a "no cost yet"
   state on the balance and a later revaluation, rather than refusing.
 - Adjustments are needed in bulk (a full inventory count of thousands of

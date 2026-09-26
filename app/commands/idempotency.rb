@@ -29,7 +29,6 @@ module Idempotency
       @state = state
     end
 
-    def fresh? = @state == :fresh
     def replay? = @state == :replay
     def reused? = @state == :reused
 

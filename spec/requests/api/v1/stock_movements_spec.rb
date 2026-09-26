@@ -32,15 +32,18 @@ RSpec.describe "Stock movements API" do
       assert_response_schema_confirm(401)
     end
 
-    %w[owner admin purchasing sales finance read_only].each do |role|
-      it "answers ok for the #{role} role" do
+    # ADR 0016: the ledger names who moved what and carries free text, so sales
+    # (who reads balances, quantities only) does not read it.
+    { "owner" => :ok, "admin" => :ok, "purchasing" => :ok, "sales" => :forbidden, "finance" => :ok,
+      "read_only" => :ok }.each do |role, expected_status|
+      it "answers #{expected_status} for the #{role} role" do
         user = create_membership(organization, role:)
         sign_in_via_api(email: user.email, password:)
 
         get "/api/v1/stock_movements"
 
-        expect(response).to have_http_status(:ok)
-        assert_response_schema_confirm(200)
+        expect(response).to have_http_status(expected_status)
+        assert_response_schema_confirm(response.status)
       end
     end
 
@@ -88,7 +91,7 @@ RSpec.describe "Stock movements API" do
       expect(response.parsed_body["meta"]["total"]).to eq(3)
     end
 
-    it "hides values from the sales role and shows them to finance" do
+    it "shows finance the values and the note, and never lets sales see any of it" do
       set_current_tenant(organization)
       warehouse = create(:warehouse, organization:)
       product = create(:product, organization:)
@@ -96,14 +99,14 @@ RSpec.describe "Stock movements API" do
       sales = create_membership(organization, role: "sales")
       finance = create_membership(organization, role: "finance")
 
-      sign_in_via_api(email: sales.email, password:)
-      get "/api/v1/stock_movements"
-      assert_response_schema_confirm(200)
-      expect(response.parsed_body["data"].first).to include("quantity" => "10.000", "value_cents" => nil, "value_after_cents" => nil)
-
       sign_in_via_api(email: finance.email, password:)
       get "/api/v1/stock_movements"
       expect(response.parsed_body["data"].first).to include("value_cents" => 850, "value_after_cents" => 850)
+
+      sign_in_via_api(email: sales.email, password:)
+      get "/api/v1/stock_movements"
+      expect(response).to have_http_status(:forbidden)
+      expect(response.body).not_to include("850")
     end
 
     it "orders the ledger by id, newest first, whatever the clock said" do

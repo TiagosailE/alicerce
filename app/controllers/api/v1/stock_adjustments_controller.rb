@@ -9,6 +9,10 @@ module Api
       # above real counting keeps a loop from filling the database.
       rate_limit to: 60, within: 1.minute, name: "stock_adjustment_user", only: :create,
         by: -> { Current.user&.id || request.remote_ip }
+      # And a ceiling for the organization as a whole, so several accounts of
+      # one (the public demo's shared users) cannot add up to a flood.
+      rate_limit to: 200, within: 10.minutes, name: "stock_adjustment_organization", only: :create,
+        by: -> { Current.organization&.id || request.remote_ip }
 
       # A count adjustment (ADR 0016). The product and warehouse are looked up
       # through the tenant scope, so another organization's id answers 404.
@@ -26,11 +30,11 @@ module Api
         return render_result_error(result) unless result.success?
 
         adjustment = result.value
-        value_visible = policy(Inventory::Balance).view_value?
+        # Whoever may adjust may also read values and the ledger.
         render json: {
           data: {
-            movement: adjustment.movement && Inventory::MovementSerializer.new(adjustment.movement, value_visible:).as_json,
-            balance: Inventory::BalanceSerializer.new(adjustment.balance, value_visible:).as_json
+            movement: adjustment.movement && Inventory::MovementSerializer.new(adjustment.movement).as_json,
+            balance: Inventory::BalanceSerializer.new(adjustment.balance, value_visible: true).as_json
           }
         }, status: adjustment.status
       end

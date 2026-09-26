@@ -284,7 +284,7 @@ export interface paths {
         };
         /**
          * List the movement ledger, newest first
-         * @description Every role can read (ADR 0016).
+         * @description Every role but sales can read (ADR 0016); sales sees balances only.
          */
         get: operations["listStockMovements"];
         put?: never;
@@ -814,12 +814,12 @@ export interface components {
             warehouse: components["schemas"]["Warehouse"];
             /** @description Signed, and a negative quantity takes stock out. */
             quantity: string;
-            /** @description Signed like quantity. Null for a role that may not see values. */
-            value_cents: number | null;
+            /** @description Signed like quantity. */
+            value_cents: number;
             /** @enum {string} */
             currency: "BRL";
             on_hand_after: string;
-            value_after_cents: number | null;
+            value_after_cents: number;
             actor: {
                 id: number;
                 name: string;

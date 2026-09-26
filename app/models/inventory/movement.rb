@@ -7,7 +7,6 @@ module Inventory
   class Movement < ApplicationRecord
     include TenantScoped
 
-    KINDS = %w[adjustment].freeze
     ADJUSTMENT_REASONS = %w[opening_balance count loss damage theft expiry found other].freeze
     # A reason states why stock moved, so it has a direction: a theft is never
     # an increase and a found item is never a decrease. Reports built on

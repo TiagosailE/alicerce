@@ -1,9 +1,9 @@
 module Inventory
-  # See BalanceSerializer for value_visible.
+  # Only whoever may read the ledger (Identity::Capabilities.view_stock_movements?)
+  # ever gets to serialize a movement, and they see values, notes and actors in full.
   class MovementSerializer
-    def initialize(movement, value_visible:)
+    def initialize(movement)
       @movement = movement
-      @value_visible = value_visible
     end
 
     def as_json
@@ -15,10 +15,10 @@ module Inventory
         product: Catalog::ProductReferenceSerializer.new(@movement.product).as_json,
         warehouse: WarehouseSerializer.new(@movement.warehouse).as_json,
         quantity: DecimalString.format(@movement.quantity, 3),
-        value_cents: (@movement.value_cents if @value_visible),
+        value_cents: @movement.value_cents,
         currency: @movement.currency,
         on_hand_after: DecimalString.format(@movement.on_hand_after, 3),
-        value_after_cents: (@movement.value_after_cents if @value_visible),
+        value_after_cents: @movement.value_after_cents,
         actor: { id: @movement.actor_user.id, name: @movement.actor_user.name },
         created_at: @movement.created_at.utc.iso8601
       }
