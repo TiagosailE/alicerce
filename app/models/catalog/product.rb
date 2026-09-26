@@ -1,6 +1,7 @@
 module Catalog
   class Product < ApplicationRecord
     include TenantScoped
+    include RaceSafeUniqueness
 
     belongs_to :category, class_name: "Catalog::Category", optional: true
     belongs_to :stock_unit, class_name: "Catalog::Unit"

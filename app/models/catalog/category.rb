@@ -1,6 +1,7 @@
 module Catalog
   class Category < ApplicationRecord
     include TenantScoped
+    include RaceSafeUniqueness
 
     has_many :products, dependent: :restrict_with_error
 

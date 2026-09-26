@@ -1,6 +1,7 @@
 module Catalog
   class Partner < ApplicationRecord
     include TenantScoped
+    include RaceSafeUniqueness
 
     DOCUMENT_TYPES = %w[cpf cnpj].freeze
 
