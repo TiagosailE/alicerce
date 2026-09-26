@@ -5,6 +5,7 @@ module Catalog
   # by the product's stock_unit always uses the same factor.
   class UnitConversion < ApplicationRecord
     include TenantScoped
+    include RaceSafeUniqueness
 
     belongs_to :product, class_name: "Catalog::Product", inverse_of: :unit_conversion
     belongs_to :purchase_unit, class_name: "Catalog::Unit"

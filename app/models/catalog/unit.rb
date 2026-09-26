@@ -3,6 +3,7 @@ module Catalog
   # short form shown in tables; name is the full description.
   class Unit < ApplicationRecord
     include TenantScoped
+    include RaceSafeUniqueness
 
     validates :code, presence: true, uniqueness: { scope: :organization_id }
     validates :name, presence: true
