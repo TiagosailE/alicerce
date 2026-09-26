@@ -20,14 +20,44 @@ RSpec.describe Purchasing::ApproveOrder do
     expect(Audit::Event.where(action: "purchase_order_approved").sole.field_changes).to include("status" => { "from" => "draft", "to" => "approved" })
   end
 
-  it "freezes the product and factor as they are at approval" do
-    conversion = cimento.unit_conversion
-    conversion.update!(factor: BigDecimal("2"))
+  it "freezes the descriptive copies (name, sku, supplier) as they are at approval" do
+    order
     cimento.update!(name: "Cimento CP II-32")
+    supplier.update!(name: "Cimentos Bahia Ltda")
 
     approve
 
-    expect(order.reload.lines.sole).to have_attributes(factor: BigDecimal("2"), product_name: "Cimento CP II-32")
+    expect(order.reload.lines.sole.product_name).to eq("Cimento CP II-32")
+    expect(order).to have_attributes(supplier_name: "Cimentos Bahia Ltda", status: "approved")
+  end
+
+  it "never changes what the approver saw in money: a purchase unit or factor changed since the draft is refused, and saving the draft again shows it" do
+    order # 200 SC at R$ 32,50, factor 1: 200 stock units at 32,50 each
+    mil = create(:unit, organization:, code: "MIL", name: "Milheiro")
+    cimento.unit_conversion.update!(purchase_unit: mil, factor: BigDecimal("1000"))
+
+    result = approve
+
+    expect(result.error).to eq(:validation_failed)
+    expect(result.details[:fields]).to eq("lines.0.conversion" => [ "changed" ])
+    expect(order.reload).to have_attributes(status: "draft", revision: 0)
+    expect(order.lines.sole).to have_attributes(purchase_unit_code: "SC", factor: BigDecimal("1"), net_cents: 637_000)
+
+    # Saving the draft again refreshes the copy and bumps the revision, so the approver sees the new terms
+    Purchasing::UpdateOrder.call(order:, actor:, revision: 0, supplier:, lines: [ line_input(cimento, quantity: "200", unit_price_cents: 3_250, discount_bp: 200) ],
+      installments: 1, first_due_days: 30, interval_days: 30)
+    expect(approve(order, revision: 0).error).to eq(:stale)
+    expect(approve(order, revision: 1)).to be_success
+    expect(order.reload.lines.sole).to have_attributes(purchase_unit_code: "MIL", factor: BigDecimal("1000"), net_cents: 637_000)
+  end
+
+  it "refuses to approve an order that could never be received because it does not fit a stock movement" do
+    other = orderable_product(organization, sku: "GRD-001", purchase_unit_code: "MIL", factor: "1000")
+    draft = Purchasing::Order.new(organization:, created_by_user: actor, supplier:, installments: 1)
+    Purchasing::OrderRules.copy_supplier(draft, supplier)
+    result = Purchasing::BuildLines.call(order: draft, inputs: [ line_input(other, quantity: "999999999999.999", unit_price_cents: 1) ])
+
+    expect(result.last).to eq("lines.0.quantity" => [ "too_large" ])
   end
 
   it "refuses an approval based on an older revision, so an edit made in between is never approved unseen" do

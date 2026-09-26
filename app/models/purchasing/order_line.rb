@@ -19,6 +19,7 @@ module Purchasing
     validates :discount_bp, numericality: { only_integer: true, in: 0..10_000 }
     validate :quantity_fits_the_column_scale
     validate :gross_fits_the_cap
+    validate :stock_quantity_fits_a_movement
 
     # What the buyer would still receive on this line.
     def remaining_quantity = quantity - received_quantity
@@ -58,6 +59,15 @@ module Purchasing
 
       def gross_fits_the_cap
         errors.add(:quantity, :too_large) if gross_cents.to_i > Inventory::Ledger::VALUE_CAP_CENTS
+      end
+
+      # What the line comes to in stock units becomes a movement's quantity, which
+      # holds twelve integer digits: an order that could never be received must
+      # not exist (ADR 0017).
+      def stock_quantity_fits_a_movement
+        return if quantity.blank? || factor.blank? || !quantity.positive?
+
+        errors.add(:quantity, :too_large) if Purchasing::ReceiptMath.stock_quantity(quantity, factor) >= 10**QUANTITY_INTEGER_DIGITS
       end
   end
 end

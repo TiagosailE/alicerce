@@ -67,7 +67,11 @@ validated in a following migration.
   `first_due_days` 0 to 365, `interval_days` 0 to 365), a free-text `note`,
   `total_cents` (the sum of the lines' net, stored), approval and cancellation
   stamps, and a `revision` (ADR 0015). Unique `(organization_id, id)`.
-- `purchasing_order_lines`: the order, `position`, the product with its sku and
+- `purchasing_order_lines`: (the database states the money formula in checks,
+  `gross = round(quantity x price)` and `discount = round(gross x bp / 10000)`, and a
+  trigger freezes a line once its order is not a draft, refusing any change to the
+  quantity, price, discount, factor, unit, product or amounts and any insert or
+  delete; only what has been received moves) the order, `position`, the product with its sku and
   name copied, the purchase unit and its code and the `factor` copied from the
   product's conversion (numeric(15,6)), `quantity` in purchase units
   (numeric(15,3)), `unit_price_cents` per purchase unit, `discount_bp`, and the
@@ -130,8 +134,13 @@ between the read and the click is refused as `409 stale` instead of approved uns
 Approval requires at least one line, positive quantities and prices, an active
 supplier that is a supplier, active products with a conversion, and every line's
 gross and the order's total within `Ledger::VALUE_CAP_CENTS`, so an order that
-could never be received cannot exist; it copies the factor again from the product's
-conversion, so what is approved is what is frozen. An approved order cannot be
+could never be received cannot exist (a line's stock quantity must fit a movement's
+`numeric(15,3)` too). Approval refreshes the descriptive copies (the supplier's name
+and document, each product's name and sku) and freezes them, but never changes what
+the approver saw in money: if a product's purchase unit or factor changed since the
+draft was saved, approval is refused (`lines.N.conversion: changed`) and saving the
+draft again refreshes the copy, bumps the revision and shows the approver the new
+terms. An approved order cannot be
 edited or returned to draft; a mistake is cancelled and created again. Cancelling
 closes what has not been received; what was received stays.
 

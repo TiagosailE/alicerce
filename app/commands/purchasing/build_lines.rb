@@ -16,17 +16,23 @@ module Purchasing
       end
       return [ [], { "lines" => [ "too_many" ] } ] if inputs.size > Purchasing::Order::MAX_LINES
 
-      lines = inputs.each_with_index.map { |input, index| build(order, input, index, fields) }
+      hashes = inputs.map { |input| input.respond_to?(:to_unsafe_h) ? input.to_unsafe_h : input }
+      ids = hashes.filter_map { |input| IntegerString.parse(input[:product_id] || input["product_id"]) if input.is_a?(Hash) }.uniq
+      products = Catalog::Product.where(id: ids).includes(:unit_conversion, :stock_unit).index_by(&:id)
+      lines = hashes.each_with_index.map { |input, index| build(order, input, index, fields, products) }
       [ lines, fields ]
     end
 
-    def build(order, input, index, fields)
-      input = input.respond_to?(:to_unsafe_h) ? input.to_unsafe_h : input.to_h
+    def build(order, input, index, fields, products)
+      line = Purchasing::OrderLine.new(order:, organization: order.organization, position: index + 1)
+      unless input.is_a?(Hash)
+        (fields["lines.#{index}"] ||= []) << "invalid"
+        return line
+      end
+
       input = input.with_indifferent_access
       report = ->(field, kind) { (fields["lines.#{index}.#{field}"] ||= []) << kind.to_s }
-
-      line = Purchasing::OrderLine.new(order:, organization: order.organization, position: index + 1)
-      product = input[:product_id].is_a?(Array) || input[:product_id].is_a?(Hash) ? nil : Catalog::Product.includes(:unit_conversion, :stock_unit).find_by(id: input[:product_id])
+      product = products[IntegerString.parse(input[:product_id])]
       if product.nil?
         report.call(:product_id, :not_found)
       elsif product.unit_conversion.nil?
@@ -39,14 +45,14 @@ module Purchasing
                                                                 integer_digits: Purchasing::OrderLine::QUANTITY_INTEGER_DIGITS)
       kind ? report.call(:quantity, kind) : line.quantity = quantity
 
-      price = whole_number(input[:unit_price_cents])
+      price = IntegerString.parse(input[:unit_price_cents])
       if price.nil? || price.negative? || price > PRICE_CAP
         report.call(:unit_price_cents, price.nil? ? :not_a_number : :out_of_range)
       else
         line.unit_price_cents = price
       end
 
-      discount = input[:discount_bp].nil? || input[:discount_bp] == "" ? 0 : whole_number(input[:discount_bp])
+      discount = input[:discount_bp].nil? || input[:discount_bp] == "" ? 0 : IntegerString.parse(input[:discount_bp])
       if discount.nil? || !(0..10_000).cover?(discount)
         report.call(:discount_bp, discount.nil? ? :not_a_number : :out_of_range)
       else
@@ -60,12 +66,6 @@ module Purchasing
       line
     end
 
-    def whole_number(raw)
-      return raw if raw.is_a?(Integer)
-      return Integer(raw, 10) if raw.is_a?(String) && raw.match?(/\A-?\d+\z/)
-
-      nil
-    end
-    private_class_method :build, :whole_number
+    private_class_method :build
   end
 end

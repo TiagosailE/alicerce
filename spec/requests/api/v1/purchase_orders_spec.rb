@@ -366,4 +366,109 @@ RSpec.describe "Purchase orders API" do
       expect(foreign.reload.status).to eq("draft")
     end
   end
+
+  describe "what a client can get wrong" do
+    def post_order(params, csrf_token)
+      post "/api/v1/purchase_orders", params:, as: :json, headers: { "X-CSRF-Token" => csrf_token }
+    end
+
+    it "answers 422, never 500, for lines that are not lines" do
+      owner = create_membership(organization, role: "owner")
+      supplier, product = setup_supplier_and_product
+      csrf_token = sign_in_and_csrf(owner)
+
+      [ [ "x" ], [ 1 ], [ [ 1 ] ], [ true ] ].each do |lines|
+        post_order(order_params(supplier, product, lines:), csrf_token)
+
+        expect(response).to have_http_status(:unprocessable_content), "lines #{lines.inspect} answered #{response.status}"
+        expect(response.parsed_body.dig("error", "details", "fields")).to eq("lines.0" => [ "invalid" ])
+      end
+    end
+
+    it "answers 422 for a note or a product id that is not a single value" do
+      owner = create_membership(organization, role: "owner")
+      supplier, product = setup_supplier_and_product
+      csrf_token = sign_in_and_csrf(owner)
+
+      post_order(order_params(supplier, product, note: { a: "b" }), csrf_token)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "details", "fields")).to eq("note" => [ "invalid" ])
+
+      post_order(order_params(supplier, product, lines: [ { product_id: [ 1, 2 ], quantity: "1", unit_price_cents: 1 } ]), csrf_token)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "details", "fields")).to eq("lines.0.product_id" => [ "not_found" ])
+    end
+
+    it "reads a term as base 10, so 010 is ten days and 0x1A is refused" do
+      owner = create_membership(organization, role: "owner")
+      supplier, product = setup_supplier_and_product
+      csrf_token = sign_in_and_csrf(owner)
+
+      post_order(order_params(supplier, product, first_due_days: "010"), csrf_token)
+      expect(response).to have_http_status(:created)
+      expect(response.parsed_body.dig("data", "first_due_days")).to eq(10)
+
+      post_order(order_params(supplier, product, first_due_days: "0x1A"), csrf_token)
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "details", "fields")).to have_key("first_due_days")
+    end
+
+    it "asks every write for the CSRF token, not only create" do
+      owner = create_membership(organization, role: "owner")
+      order = existing_order
+      supplier = order.supplier
+      product = order.lines.first.product
+      sign_in_via_api(email: owner.email, password:)
+
+      patch "/api/v1/purchase_orders/#{order.id}", params: order_params(supplier, product, revision: 0), as: :json
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_csrf_token")
+      post "/api/v1/purchase_orders/#{order.id}/approval", params: { revision: 0 }, as: :json
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_csrf_token")
+      post "/api/v1/purchase_orders/#{order.id}/cancellation", as: :json
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_csrf_token")
+      set_current_tenant(organization)
+      expect(order.reload.status).to eq("draft")
+    end
+
+    it "refuses sales the order detail too" do
+      sales = create_membership(organization, role: "sales")
+      order = existing_order
+      sign_in_via_api(email: sales.email, password:)
+
+      get "/api/v1/purchase_orders/#{order.id}"
+
+      expect(response).to have_http_status(:forbidden)
+      assert_response_schema_confirm(403)
+    end
+
+    it "answers not_found for another organization's supplier on an update, leaving the order as it was" do
+      owner = create_membership(organization, role: "owner")
+      order = existing_order
+      foreign_supplier, = setup_supplier_and_product(other_organization)
+      set_current_tenant(organization)
+      csrf_token = sign_in_and_csrf(owner)
+
+      patch "/api/v1/purchase_orders/#{order.id}", params: order_params(foreign_supplier, order.lines.first.product, revision: 0), as: :json,
+        headers: { "X-CSRF-Token" => csrf_token }
+
+      expect(response).to have_http_status(:not_found)
+      set_current_tenant(organization)
+      expect(order.reload).to have_attributes(revision: 0, supplier_id: order.supplier_id)
+    end
+
+    it "answers 429 past the per-user ceiling on writes" do
+      owner = create_membership(organization, role: "owner")
+      supplier, product = setup_supplier_and_product
+      csrf_token = sign_in_and_csrf(owner)
+      bad = order_params(supplier, product, lines: [])
+
+      statuses = 62.times.map do
+        post_order(bad, csrf_token)
+        response.status
+      end
+
+      expect(statuses.first(60)).to all(eq(422))
+      expect(statuses.last).to eq(429)
+    end
+  end
 end

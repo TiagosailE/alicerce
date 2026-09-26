@@ -108,14 +108,17 @@ RSpec.describe "Purchasing constraints" do
     end
 
     it "keeps a discount inside 0 to 10000 basis points and a quantity positive" do
-      expect { insert_line(order_id:, product:, unit:, bp: 10_001) }.to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_discount_range/)
-      expect { insert_line(order_id:, product:, unit:, quantity: 0) }.to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_quantity_positive/)
+      expect { insert_line(order_id:, product:, unit:, bp: 10_001, discount: 1000, net: 0) }
+        .to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_discount_range/)
+      expect { insert_line(order_id:, product:, unit:, quantity: 0, gross: 0, net: 0) }.to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_quantity_positive/)
     end
 
     it "never lets what was received exceed what was ordered, in quantity, gross or discount" do
       expect { insert_line(order_id:, product:, unit:, received: 11) }.to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_received_within_line/)
       expect { insert_line(order_id:, product:, unit:, received_gross: 1001) }.to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_received_within_line/)
-      expect { insert_line(order_id:, product:, unit:, discount: 100, net: 900, received_discount: 101) }
+      expect { insert_line(order_id:, product:, unit:, bp: 1000, discount: 100, net: 900, received_discount: 101) }
+        .to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_received_within_line/)
+      expect { insert_line(order_id:, product:, unit:, bp: 1000, discount: 100, net: 900, received_gross: 50, received_discount: 60) }
         .to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_received_within_line/)
     end
 
@@ -125,7 +128,98 @@ RSpec.describe "Purchasing constraints" do
 
       set_current_tenant(other_organization)
       expect(connection.select_value("SELECT count(*) FROM purchasing_order_lines WHERE id = #{id}").to_i).to eq(0)
-      expect { insert_line(org: organization, order_id:, product:, unit:, position: 2) }.to raise_error(ActiveRecord::StatementInvalid, /row-level security/)
+      # The freeze trigger looks the parent order up under the same row level
+      # security, so it refuses first; either way another organization cannot write.
+      expect { insert_line(org: organization, order_id:, product:, unit:, position: 2) }
+        .to raise_error(ActiveRecord::StatementInvalid, /row-level security|cannot be insert/)
+    end
+
+    it "refuses a line whose order belongs to another organization, at the composite foreign key" do
+      set_current_tenant(other_organization)
+      foreign_supplier = supplier_for(other_organization)
+      insert_order(org: other_organization, supplier: foreign_supplier)
+      foreign_order_id = connection.select_value("SELECT id FROM purchasing_orders LIMIT 1")
+      set_current_tenant(organization)
+
+      expect { insert_line(org: organization, order_id: foreign_order_id, product:, unit:) }
+        .to raise_error(ActiveRecord::StatementInvalid, /fk_purchasing_order_lines_order_same_organization|cannot be insert/)
+    end
+
+    describe "the money formula, in the database (ADR 0017)" do
+      it "refuses a gross that is not quantity x price rounded half up" do
+        # 3 x 3225 = 9675; 9674 and 9676 are both wrong
+        expect { insert_line(order_id:, product:, unit:, quantity: 3, price: 3225, gross: 9674, net: 9674) }
+          .to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_gross_follows_price/)
+        expect { insert_line(order_id:, product:, unit:, quantity: 3, price: 3225, gross: 9675, net: 9675) }.not_to raise_error
+      end
+
+      it "refuses a discount that is not the gross's share in basis points rounded half up" do
+        # 3225 at 2% is 64.5: 65 half up, not 64
+        expect { insert_line(order_id:, product:, unit:, quantity: 1, price: 3225, bp: 200, gross: 3225, discount: 64, net: 3161) }
+          .to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_discount_follows_bp/)
+        expect { insert_line(order_id:, product:, unit:, quantity: 1, price: 3225, bp: 200, gross: 3225, discount: 65, net: 3160) }.not_to raise_error
+      end
+
+      it "refuses a line that could never be received because it does not fit a stock movement" do
+        # 999999999999.999 x factor 2 is past the numeric(15,3) a movement holds
+        expect do
+          connection.transaction(requires_new: true) do
+            connection.execute(<<~SQL)
+              INSERT INTO purchasing_order_lines (organization_id, order_id, position, product_id, product_sku, product_name, purchase_unit_id,
+                purchase_unit_code, stock_unit_code, factor, quantity, unit_price_cents, discount_bp, gross_cents, discount_cents, net_cents,
+                created_at, updated_at)
+              VALUES (#{organization.id}, #{order_id}, 1, #{product.id}, 'SKU', 'P', #{unit.id}, 'SC', 'UN', 2, 999999999999.999, 0, 0, 0, 0, 0, now(), now())
+            SQL
+          end
+        end.to raise_error(ActiveRecord::StatementInvalid, /purchasing_order_lines_stock_quantity_fits/)
+      end
+    end
+
+    describe "freezing (the lines of an order that is not a draft)" do
+      def order_status!(id, status)
+        connection.execute("UPDATE purchasing_orders SET status = '#{status}' WHERE id = #{id}")
+      end
+
+      let(:line_id) do
+        insert_line(order_id:, product:, unit:)
+        connection.select_value("SELECT id FROM purchasing_order_lines LIMIT 1")
+      end
+
+      it "lets a draft's lines change, be added and be removed" do
+        id = line_id
+
+        expect { connection.execute("UPDATE purchasing_order_lines SET quantity = 20, gross_cents = 2000, net_cents = 2000 WHERE id = #{id}") }.not_to raise_error
+        expect { insert_line(order_id:, product:, unit:, position: 2) }.not_to raise_error
+        expect { connection.execute("DELETE FROM purchasing_order_lines WHERE position = 2") }.not_to raise_error
+      end
+
+      it "refuses to change what a line says once the order is approved" do
+        id = line_id
+        order_status!(order_id, "approved")
+
+        {
+          "quantity = 11, gross_cents = 1100, net_cents = 1100" => "quantity",
+          "unit_price_cents = 101, gross_cents = 1010, net_cents = 1010" => "price",
+          "discount_bp = 100, discount_cents = 10, net_cents = 990" => "discount",
+          "factor = 2" => "factor",
+          "position = 9" => "position"
+        }.each_key do |assignment|
+          expect { connection.transaction(requires_new: true) { connection.execute("UPDATE purchasing_order_lines SET #{assignment} WHERE id = #{id}") } }
+            .to raise_error(ActiveRecord::StatementInvalid, /are frozen/), "expected #{assignment} to be refused"
+        end
+      end
+
+      it "still lets what has been received move, and refuses to add or remove a line" do
+        id = line_id
+        order_status!(order_id, "approved")
+
+        expect do
+          connection.execute("UPDATE purchasing_order_lines SET received_quantity = 4, received_stock_quantity = 4, received_gross_cents = 400 WHERE id = #{id}")
+        end.not_to raise_error
+        expect { insert_line(order_id:, product:, unit:, position: 2) }.to raise_error(ActiveRecord::StatementInvalid, /cannot be insert/)
+        expect { connection.transaction(requires_new: true) { connection.execute("DELETE FROM purchasing_order_lines WHERE id = #{id}") } }
+          .to raise_error(ActiveRecord::StatementInvalid, /cannot be delete/)
+      end
     end
   end
 end

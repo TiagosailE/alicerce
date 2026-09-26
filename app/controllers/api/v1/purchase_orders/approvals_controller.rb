@@ -2,6 +2,7 @@ module Api
   module V1
     module PurchaseOrders
       class ApprovalsController < BaseController
+        include PurchasingWriteLimits
         before_action :require_authentication!
         before_action :verify_csrf_token!
 
@@ -10,7 +11,7 @@ module Api
         def create
           order = Purchasing::Order.find(params[:purchase_order_id])
           authorize(order, :approve?)
-          result = Purchasing::ApproveOrder.call(order:, actor: Current.user, revision: Integer(params.expect(:revision), exception: false))
+          result = Purchasing::ApproveOrder.call(order:, actor: Current.user, revision: IntegerString.parse(params.expect(:revision)))
           return render_result_error(result) unless result.success?
 
           personal = policy(result.value).view_personal_data?

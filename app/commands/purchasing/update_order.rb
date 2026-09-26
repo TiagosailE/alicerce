@@ -51,13 +51,19 @@ module Purchasing
         order.errors.each { |error| (fields[error.attribute.to_s] ||= []) << error.type.to_s }
         return Result.failure(:validation_failed, fields:) if fields.any?
 
+        supplier_changed = order.supplier_id_changed?
+        note_changed = order.note_changed?
         order.lines.reset
         order.lines.destroy_all
         order.lines = lines
         order.revision += 1
         order.save!
-        Audit.record("purchase_order_updated", order, actor: @actor,
-          changes: { number: order.number, supplier_id: order.supplier_id, total_cents: order.total_cents, lines: lines.size })
+        # The supplier's copied name and document, and the free-text note, are
+        # recorded as changed without their values (ADR 0010).
+        changes = { number: order.number, supplier_id: order.supplier_id, total_cents: order.total_cents, lines: lines.size }
+        changes[:supplier_copy] = "changed" if supplier_changed
+        changes[:note] = "changed" if note_changed
+        Audit.record("purchase_order_updated", order, actor: @actor, changes:)
         Result.success(order)
       end
   end
