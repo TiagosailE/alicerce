@@ -9,7 +9,7 @@ Alicerce is a multi-tenant ERP for small Brazilian distributors. The core is the
 | Piece | Version | Pinned in |
 |---|---|---|
 | Ruby | 4.0.7 | `.ruby-version` and the `Dockerfile` base image (bump both) |
-| Rails | 8.1.3 | `Gemfile.lock` |
+| Rails | 8.1.4 | `Gemfile.lock` |
 | PostgreSQL | 18.6 | `compose.yaml` and the CI service, by digest |
 | Node | 24.21.0 | `.node-version` and the `Dockerfile` build image (bump both) |
 | TypeScript | 6.0.3 | `frontend/package-lock.json` |
