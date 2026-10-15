@@ -2,3 +2,13 @@
 # disk but is never loaded: Bundler activates the json locked in Gemfile.lock,
 # and the Docker job fails if the loaded version differs from the locked one.
 CVE-2026-33210
+
+# Thruster 0.1.27, the latest release, is built with Go 1.27.1 and
+# golang.org/x/net 0.59.0; the fixes are in Go 1.27.2 and x/net 0.60.0. In
+# production Thruster listens on plain HTTP behind the platform proxy, which
+# terminates TLS, so the TLS finding has no path in; the other two are denial
+# of service on a free demo instance. Each entry expires so the image job fails
+# again if no fixed Thruster has shipped by then.
+CVE-2026-97031 exp:2026-11-14
+CVE-2026-78669 exp:2026-11-14
+CVE-2026-78667 exp:2026-11-14
